@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CiteNet – mạng trích dẫn</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a2540">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CiteNet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: clinical, exact, quiet; a research instrument, not a toy.
+   IDEA: an astronomer's star chart of the literature: one bright star, its constellation.
+   PICTURE: the live 3D citation network itself, full height, beside a reading panel.
+   COLOUR and TYPE: deep sea #0a2540 ground, sky #8fd3ff, white, signal pink #ff5c8a; Hanken Grotesk.
+   LAYOUT: chart left filling the screen, panel right 400px; on phones chart on top, panel below. */
+:root{color-scheme:dark;--bg:#0a2540;--bg2:#0e2d4d;--line:#21456b;--ink:#f3f8ff;--mut:#a9c2dc;--sky:#8fd3ff;--pink:#ff5c8a;--yel:#f7e463}
+:root[data-theme=light],:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:clip}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--sky)}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 420px;height:100dvh}
+.stage{position:relative;overflow:hidden;background:radial-gradient(ellipse at 45% 45%,#173f68 0%,#0c2a49 45%,#081d35 100%)}
+#cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+#cv:active{cursor:grabbing}
+.brand{position:absolute;top:16px;left:16px;display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.94);color:#0a2540;border-radius:12px;padding:8px 14px 8px 8px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.brand .logo{width:34px;height:34px;border-radius:50%;background:#1d5c96;color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px}
+.brand b{display:block;font-size:15px;line-height:1.1}.brand small{font-size:13px;color:#4b6584}
+.flag{position:absolute;top:16px;right:16px;background:var(--pink);color:#fff;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px}
+.empty{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:24px;gap:10px}
+.empty h2{font-weight:300;font-size:clamp(28px,4vw,46px);line-height:1.08;margin:0;text-wrap:balance;max-width:16ch;justify-self:center}
+.empty p{margin:0;color:var(--mut);max-width:46ch;justify-self:center}
+.status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(10,37,64,.92);border:1px solid var(--line);border-radius:14px;padding:16px 20px;display:flex;gap:12px;align-items:center;max-width:min(90%,420px)}
+.spin{width:20px;height:20px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--sky);animation:sp 0.9s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.tip{position:absolute;pointer-events:none;background:rgba(255,255,255,.96);color:#0a2540;font-size:13px;line-height:1.35;padding:6px 10px;border-radius:8px;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.hint{position:absolute;left:16px;bottom:16px;background:rgba(255,255,255,.92);color:#0a2540;font-size:13px;padding:7px 12px;border-radius:9px;max-width:calc(100% - 32px)}
+.timeline{position:absolute;left:16px;right:16px;bottom:62px;display:flex;gap:12px;align-items:center;background:rgba(8,29,53,.85);border:1px solid var(--line);border-radius:12px;padding:6px 14px 6px 6px}
+.timeline input{flex:1;accent-color:var(--pink);height:28px}
+.timeline span{font-size:13px;color:var(--mut);white-space:nowrap;min-width:9em;text-align:right}
+.icon{width:44px;height:44px;border-radius:10px;border:0;background:var(--pink);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
+.panel{background:var(--bg);border-left:1px solid var(--line);overflow-y:auto;padding:22px 22px 40px}
+.panel h1{font-size:32px;line-height:1.05;margin:0 0 10px;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
+.chip{font-size:13px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--mut);white-space:nowrap}
+.chip.on{color:#0a2540;border-color:transparent}
+.sec{border-top:1px solid var(--line);padding-top:16px;margin-top:16px}
+label{font-size:14px;color:var(--mut);display:block;margin-bottom:6px}
+textarea,input[type=text],input[type=password],input[type=search],select{width:100%;min-height:44px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:16px}
+textarea{resize:vertical;font-size:15px}
+:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+.row{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:10px}
+.row>*{flex:1 1 auto}
+.btn{min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);padding:8px 14px;cursor:pointer;font-size:15px;white-space:nowrap}
+.btn:hover{border-color:var(--sky)}
+.btn.primary{background:var(--pink);border-color:var(--pink);color:#fff;font-weight:600}
+.btn.on{background:var(--sky);color:#0a2540;border-color:var(--sky)}
+.btn:disabled{opacity:.5;cursor:default}
+.grow0{flex:0 0 auto}
+details summary{cursor:pointer;color:var(--sky);font-size:14px;min-height:32px;padding-top:8px}
+.note{font-size:13px;color:var(--mut);margin:6px 0 0}
+.msg{font-size:14px;margin:10px 0 0;color:var(--yel)}
+.msg:empty{display:none}
+.msg.err{color:#ff9db6}
+.legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;margin-top:12px}
+.legend button{display:flex;gap:8px;align-items:center;background:none;border:0;padding:4px 0;text-align:left;font-size:14px;cursor:pointer;min-height:32px}
+.legend button.off{opacity:.35;text-decoration:line-through}
+.dot{width:12px;height:12px;border-radius:50%;flex:none;box-shadow:inset -2px -2px 3px rgba(0,0,0,.35)}
+.legend .n{color:var(--mut);margin-left:auto;font-size:13px}
+.ramp{grid-column:1/-1;height:10px;border-radius:5px;background:linear-gradient(90deg,#3b4fd8,#4fc1c6,#f7e463,#e8452c)}
+.rampl{grid-column:1/-1;display:flex;justify-content:space-between;font-size:13px;color:var(--mut)}
+.tabs{display:flex;gap:4px;margin-top:16px;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;border-bottom:3px solid transparent;padding:10px 4px;cursor:pointer;color:var(--mut);font-size:15px;min-height:44px}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--pink);font-weight:600}
+.tab{padding-top:14px}
+.detail h2{font-size:21px;line-height:1.25;margin:0 0 8px;font-weight:600}
+.meta{color:var(--mut);font-size:14px;margin:0 0 4px}
+.warn{background:#5a1630;border:1px solid #e8452c;border-radius:10px;padding:8px 12px;font-size:14px;margin:10px 0}
+.parts{margin-top:12px;display:grid;gap:8px}
+.part{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;font-size:14px}
+.part .bar{grid-column:1/-1;height:6px;border-radius:3px;background:var(--bg2);overflow:hidden}
+.part .bar i{display:block;height:100%;background:var(--sky)}
+.part small{grid-column:1/-1;color:var(--mut);font-size:13px}
+.score{display:flex;align-items:baseline;gap:10px;margin-top:14px}
+.score b{font-size:40px;line-height:1;font-weight:300}
+.abs{font-size:15px;color:#d8e6f5;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--mut);font-weight:400;font-size:13px;padding:6px 4px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap}
+td{padding:8px 4px;border-bottom:1px solid #173a5e;vertical-align:top}
+td.num,th.num{text-align:right;white-space:nowrap}
+tr.sel td{background:#173f68}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:#123659}
+.t1{display:block;line-height:1.3}
+.t2{display:block;color:var(--mut);font-size:13px}
+.disc{font-size:13px;color:var(--mut);border-left:3px solid var(--line);padding-left:10px;margin-top:14px}
+.check{display:flex;gap:10px;align-items:center;font-size:15px;color:var(--ink);min-height:40px;margin:0}
+.check input{width:20px;height:20px;accent-color:var(--pink)}
+input[type=range]{accent-color:var(--pink);width:100%}
+pre,.scroll{overflow-x:auto}code{overflow-wrap:anywhere}
+@media(max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr);height:auto}
+  .stage{height:62vh;min-height:380px}
+  .panel{border-left:0;border-top:1px solid var(--line);overflow:visible}
+  .timeline{bottom:58px}
+}
+@media(max-width:600px){
+  .brand small{display:none}
+  .flag{top:66px;left:16px;right:auto}
+  .hint{font-size:12px}
+  table{font-size:13px}
+  .stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:7em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:6.5em;margin-inline-start:-7em;white-space:normal;color:var(--mut)}.stack td:empty{display:none}
+}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="stage" id="stage">
+    <canvas id="cv" aria-label="Đồ thị mạng trích dẫn ba chiều"></canvas>
+    <div class="brand"><span class="logo">CN</span><div><b>CiteNet</b><small>bản đồ mạng trích dẫn</small></div></div>
+    <div class="flag" id="demoFlag" hidden>Dữ liệu mô phỏng, không phải bài báo thật</div>
+    <div class="empty" id="empty">
+      <h2>Một DOI, cả mạng trích dẫn quanh nó.</h2>
+      <p>Nhập DOI ở khung bên cạnh. CiteNet lấy tài liệu tham khảo, các bài trích dẫn, tóm tắt, bản truy cập mở, rồi phân loại thiết kế nghiên cứu và chấm điểm sàng lọc độ tin cậy.</p>
+      <p><button class="btn" id="demoBtn2" type="button">Xem bản mô phỏng</button></p>
+    </div>
+    <div class="status" id="status" hidden><div class="spin"></div><span id="statusTxt"></span></div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="timeline" id="timeline" hidden>
+      <button class="icon" id="play" type="button" aria-label="Phát diễn tiến theo năm"><svg width="18" height="18" viewBox="0 0 18 18" id="playIco"><path d="M4 2l12 7-12 7z" fill="currentColor"/></svg></button>
+      <input type="range" id="year" aria-label="Năm xuất bản tối đa">
+      <span id="yearLbl"></span>
+    </div>
+    <div class="hint" id="hint">Tự xoay đến khi bạn kéo · kéo để xoay · chuột phải hoặc hai ngón để dời · cuộn hoặc chụm để phóng · chạm vào nút để truy vết</div>
+  </section>
+
+  <aside class="panel" id="panel">
+    <h1>Mạng trích dẫn</h1>
+    <div class="chips" id="stats"><span class="chip">Chưa có dữ liệu</span></div>
+
+    <form id="doiForm" class="sec" autocomplete="off">
+      <label for="doi">Bài gốc: DOI, mỗi dòng một bài (có thể nhiều bài)</label>
+      <textarea id="doi" rows="2" placeholder="10.1001/jamanetworkopen.2022.0773"></textarea>
+      <div class="row">
+        <div><label for="maxCit">Tối đa bài trích dẫn mỗi bài gốc</label>
+          <select id="maxCit"><option>100</option><option selected>200</option><option>400</option><option>800</option></select></div>
+        <button class="btn primary grow0" type="submit" id="go">Dựng mạng</button>
+      </div>
+      <details id="settings"><summary>Khoá API OpenAlex và email</summary>
+        <div class="row"><div><label for="key">Khoá API (miễn phí tại openalex.org/settings/api)</label><input type="password" id="key" placeholder="Dán khoá vào đây"></div></div>
+        <div class="row"><div><label for="email">Email (gửi kèm cho OpenAlex và PubMed)</label><input type="text" id="email" inputmode="email" placeholder="ten@benhvien.vn"></div></div>
+        <p class="note">Khoá chỉ lưu trong trình duyệt này. Không có khoá vẫn chạy được với hạn mức nhỏ; có khoá miễn phí được hạn mức gấp 10 lần.</p>
+      </details>
+      <div class="row">
+        <button class="btn" type="button" id="importBtn">Nhập JSON</button>
+        <button class="btn" type="button" id="demoBtn">Bản mô phỏng</button>
+        <button class="btn" type="button" id="standaloneBtn" hidden>Tải bản chạy độc lập</button>
+      </div>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+      <p class="msg" id="msg" role="status"></p>
+    </form>
+
+    <div class="sec" id="toolsSec" hidden>
+      <label for="q">Tìm bài</label>
+      <input type="search" id="q" placeholder="Tiêu đề, tác giả, DOI…">
+      <div class="row">
+        <div><label for="mode">Tô màu theo</label>
+          <select id="mode">
+            <option value="role">Chiều trích dẫn</option>
+            <option value="type">Thiết kế nghiên cứu</option>
+            <option value="tier">Mức tin cậy</option>
+            <option value="year">Năm xuất bản</option>
+          </select></div>
+        <button class="btn grow0" type="button" id="reset">Sắp lại</button>
+        <button class="btn grow0" type="button" id="dim">2D</button>
+      </div>
+      <div class="legend" id="legend"></div>
+      <p class="note">Kích thước nút = độ kết nối trong mạng, không phải chất lượng. Toạ độ không phải trục số. Chạm vào chú giải để ẩn/hiện nhóm.</p>
+
+      <nav class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="detail" id="t-detail">Chi tiết</button>
+        <button role="tab" aria-selected="false" data-tab="list" id="t-list">Danh sách</button>
+        <button role="tab" aria-selected="false" data-tab="filter" id="t-filter">Lọc &amp; xuất</button>
+      </nav>
+      <div class="tab detail" id="tab-detail"></div>
+      <div class="tab" id="tab-list" hidden></div>
+      <div class="tab" id="tab-filter" hidden>
+        <label for="minScore">Điểm tin cậy tối thiểu: <b id="minScoreLbl">0</b></label>
+        <input type="range" id="minScore" min="0" max="90" step="5" value="0">
+        <label class="check"><input type="checkbox" id="oaOnly"> Chỉ bài có bản truy cập mở</label>
+        <label class="check"><input type="checkbox" id="noRetr"> Ẩn bài đã bị rút</label>
+        <div class="sec">
+          <p class="meta" id="expCount"></p>
+          <div class="row">
+            <button class="btn" type="button" id="expRis">RIS (Zotero/EndNote)</button>
+            <button class="btn" type="button" id="expCsv">CSV (Excel)</button>
+          </div>
+          <div class="row">
+            <button class="btn" type="button" id="expJson">JSON (mở lại / chia sẻ)</button>
+            <button class="btn" type="button" id="expPdf">Danh sách link PDF mở</button>
+          </div>
+          <p class="msg" id="expMsg" role="status"></p>
+        </div>
+        <div class="sec" id="aiSec" hidden>
+          <p class="meta">Còn <b id="unkN">0</b> bài chưa rõ thiết kế nghiên cứu.</p>
+          <button class="btn primary" type="button" id="aiBtn">Nhờ Claude đọc tóm tắt và phân loại</button>
+          <p class="msg" id="aiMsg" role="status"></p>
+        </div>
+        <p class="disc">Điểm tin cậy là điểm sàng lọc tự động (thiết kế nghiên cứu theo thứ bậc bằng chứng Oxford CEBM, nơi công bố, cỡ mẫu trong tóm tắt, lượt trích dẫn theo năm, tính cập nhật). Không thay thế thẩm định GRADE hay công cụ nguy cơ sai lệch (RoB 2, ROBINS-I).</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+{
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem('citenet:' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('citenet:' + k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+};
+const CURY = new Date().getFullYear();
+const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const safeUrl = u => /^https:\/\//i.test(u || '') ? u : '';
+
+/* ---------- vocabularies ---------- */
+const TYPES = {
+  sr:{l:'Tổng quan hệ thống / phân tích gộp',w:50,c:'#ff5c8a'}, gl:{l:'Hướng dẫn / đồng thuận',w:44,c:'#ffa24c'},
+  rct:{l:'Thử nghiệm ngẫu nhiên (RCT)',w:42,c:'#f7e463'}, nrt:{l:'Thử nghiệm không ngẫu nhiên',w:30,c:'#b9f18c'},
+  coh:{l:'Nghiên cứu đoàn hệ',w:28,c:'#4fc1c6'}, cc:{l:'Bệnh – chứng',w:22,c:'#8fd3ff'}, cs:{l:'Cắt ngang',w:18,c:'#6f8cff'},
+  obs:{l:'Quan sát (khác)',w:22,c:'#5aa9e6'}, rev:{l:'Tổng quan tường thuật',w:14,c:'#c3a6ff'}, cr:{l:'Ca bệnh / loạt ca',w:10,c:'#e3b5ff'},
+  pre:{l:'Tiền lâm sàng',w:8,c:'#d9a066'}, oth:{l:'Khác (định tính, mô hình…)',w:14,c:'#9fb3c8'}, op:{l:'Ý kiến / thư / xã luận',w:5,c:'#7c8ea3'},
+  unk:{l:'Chưa rõ',w:15,c:'#4a6a8c'}
+};
+const ROLES = {seed:{l:'Bài gốc',c:'#ff5c8a'}, ref:{l:'Bài gốc trích dẫn',c:'#8fd3ff'}, cit:{l:'Trích dẫn bài gốc',c:'#7ee0b0'},
+  both:{l:'Cả hai chiều',c:'#c3a6ff'}, multi:{l:'Chung nhiều bài gốc',c:'#ffffff'}, ind:{l:'Liên kết gián tiếp',c:'#7c8ea3'}};
+const TIERS = [{k:'A',min:70,l:'A · cao (≥70)',c:'#6ee7b7'},{k:'B',min:50,l:'B · khá (50–69)',c:'#f7e463'},{k:'C',min:30,l:'C · trung bình (30–49)',c:'#ffa24c'},{k:'D',min:0,l:'D · thấp (<30)',c:'#e8452c'}];
+const tierOf = v => TIERS.find(t => v >= t.min);
+
+/* ---------- classification ---------- */
+const KW = [
+  ['sr', /meta-?analy|systematic(ally)? review|umbrella review|scoping review|pooled analysis of (randomi|trials)/i],
+  ['nrt', /non-?randomi[sz]ed|single-arm|quasi-experiment|before-and-after|pre-?post (study|design)|open-label,? single/i],
+  ['rct', /randomi[sz]ed|randomly (assigned|allocated)|randomi[sz]ation/i],
+  ['cc', /case[- ]control/i],
+  ['coh', /cohort|prospective(ly)? (study|follow|observational)|retrospective(ly)?|longitudinal (study|analysis)|registry|follow-up study/i],
+  ['cs', /cross-sectional|prevalence survey|national survey|questionnaire survey/i],
+  ['cr', /case report|case series|a case of|we report a|we describe a (patient|case)/i],
+  ['pre', /\b(mice|mouse|murine|rats?|rodent|zebrafish|in vitro|cell lines?|porcine model|animal model)\b/i],
+  ['oth', /qualitative|focus groups?|semi-structured interview|cost-effectiveness|economic evaluation|simulation model|modell?ing study|mendelian randomi[sz]ation/i]
+];
+const TITLE_ONLY = [['gl', /guideline|consensus statement|position statement|practice parameter|recommendations (of|from|for)|expert consensus/i], ['rev', /\breview\b|state of the art|an overview|narrative/i]];
+function kwType(title, abs) {
+  for (const [t, re] of TITLE_ONLY.slice(0, 1)) if (re.test(title)) return t;
+  if (/mendelian randomi[sz]ation/i.test(title + ' ' + abs)) return 'oth';
+  for (const [t, re] of KW) if (re.test(title)) return t;
+  for (const [t, re] of TITLE_ONLY.slice(1)) if (re.test(title)) return t;
+  for (const [t, re] of KW) if (re.test(abs)) return t;
+  return null;
+}
+function pmType(pt) {
+  const has = s => pt.some(p => p.toLowerCase() === s.toLowerCase());
+  const pre = s => pt.some(p => p.toLowerCase().startsWith(s.toLowerCase()));
+  if (has('Meta-Analysis') || has('Systematic Review')) return 'sr';
+  if (has('Practice Guideline') || has('Guideline') || has('Consensus Development Conference')) return 'gl';
+  if (pre('Randomized Controlled Trial') || has('Equivalence Trial')) return 'rct';
+  if (pre('Clinical Trial') || has('Controlled Clinical Trial') || has('Pragmatic Clinical Trial')) return 'nrt';
+  if (has('Observational Study')) return 'obs';
+  if (has('Case Reports')) return 'cr';
+  if (has('Review')) return 'rev';
+  if (has('Editorial') || has('Comment') || has('Letter') || has('News')) return 'op';
+  return null;
+}
+function classify(n) {
+  const kw = kwType(n.title || '', n.abs || '');
+  const pm = pmType(n.pubtypes || []);
+  if (pm) {
+    if (pm === 'nrt' && kw === 'rct') return {t:'rct', src:'PubMed + từ khoá tóm tắt'};
+    if (pm === 'rev' && kw === 'sr') return {t:'sr', src:'PubMed + từ khoá tóm tắt'};
+    if (pm === 'obs' && ['coh','cc','cs'].includes(kw)) return {t:kw, src:'PubMed + từ khoá tóm tắt'};
+    if (pm === 'op' && kw && kw !== 'op' && n.abs && n.abs.length > 600) return {t:kw, src:'Từ khoá tóm tắt'};
+    return {t:pm, src:'PubMed'};
+  }
+  if (kw) return {t:kw, src:n.abs ? 'Từ khoá tiêu đề/tóm tắt' : 'Từ khoá tiêu đề'};
+  const ot = n.otype;
+  if (ot === 'review') return {t:'rev', src:'OpenAlex'};
+  if (ot === 'editorial' || ot === 'letter' || ot === 'erratum') return {t:'op', src:'OpenAlex'};
+  return {t:'unk', src:'Không đủ thông tin'};
+}
+function sampleSize(t) {
+  if (!t) return null;
+  let best = null;
+  const take = s => { const v = parseInt(String(s).replace(/[ ,.]/g, ''), 10); if (v >= 5 && v < 5e7 && !(v >= 1950 && v <= 2035 && String(s).length === 4)) best = Math.max(best || 0, v); };
+  const re1 = /\b(\d{1,3}(?:[ ,]\d{3})+|\d{2,8})\s+(?:[a-z-]+\s){0,3}?(patients|participants|women|men|adults|children|subjects|individuals|infants|people|persons|cases|pregnancies|mothers|neonates|newborns|residents|volunteers|veterans|survivors|respondents|admissions|episodes)\b/gi;
+  let m; while ((m = re1.exec(t))) take(m[1]);
+  const re2 = /\b[nN]\s?=\s?(\d{1,3}(?:,\d{3})+|\d{2,8})\b/g;
+  while ((m = re2.exec(t))) take(m[1]);
+  return best;
+}
+function scoreOf(n) {
+  const T = TYPES[n.study.t], parts = [];
+  parts.push({k:'Thiết kế nghiên cứu', v:T.w, max:50, note:T.l + ' · nguồn: ' + n.study.src + (n.study.why ? ' (' + n.study.why + ')' : '')});
+  let v = 5, note = 'Không rõ nơi công bố';
+  if (n.otype === 'preprint' || n.srcType === 'repository') { v = 3; note = 'Bản thảo / kho lưu trữ, chưa bình duyệt'; }
+  else if (n.srcType === 'journal') { v = 10; note = 'Tạp chí: ' + (n.journal || 'có'); }
+  else if (n.srcType) { v = 6; note = 'Nguồn: ' + n.srcType; }
+  parts.push({k:'Nơi công bố', v, max:10, note});
+  const N = sampleSize(n.abs), t = n.study.t;
+  if (t === 'sr' || t === 'gl') parts.push({k:'Cỡ mẫu', v:10, max:15, note:'Không áp dụng (bài tổng hợp)'});
+  else if (t === 'rev' || t === 'op') parts.push({k:'Cỡ mẫu', v:0, max:15, note:'Không áp dụng'});
+  else parts.push({k:'Cỡ mẫu', v:N == null ? 0 : N >= 1000 ? 15 : N >= 300 ? 12 : N >= 100 ? 9 : N >= 30 ? 5 : 2, max:15,
+    note:N == null ? (n.abs ? 'Không tìm thấy cỡ mẫu trong tóm tắt' : 'Không có tóm tắt') : 'Khoảng ' + N.toLocaleString('vi-VN') + ' (trích từ tóm tắt)'});
+  const age = Math.max(1, CURY - (n.year || CURY) + 1), cpy = (n.cited || 0) / age;
+  parts.push({k:'Lượt trích dẫn theo năm', v:cpy >= 20 ? 15 : cpy >= 5 ? 11 : cpy >= 1 ? 6 : 2, max:15, note:(n.cited || 0).toLocaleString('vi-VN') + ' lượt, ~' + cpy.toFixed(1) + '/năm'});
+  parts.push({k:'Tính cập nhật', v:age <= 5 ? 10 : age <= 10 ? 7 : age <= 20 ? 4 : 2, max:10, note:n.year ? 'Xuất bản ' + n.year : 'Không rõ năm'});
+  let total = parts.reduce((a, p) => a + p.v, 0);
+  if (n.retracted) total = 0;
+  return {v:total, parts};
+}
+
+/* ---------- state ---------- */
+const S = {nodes:[], edges:[], idx:new Map(), seeds:[], meta:{}, mode:'role', sel:null, q:'', yearCut:null, demo:false,
+  alpha:0, minY:0, maxY:0, maxDeg:1, sortKey:'score', sortDir:-1, tab:'detail'};
+const F = {hide:{role:new Set(), type:new Set(), tier:new Set()}, minScore:0, oa:false, noRetr:false};
+const cfg = {key:LS.get('key', ''), email:LS.get('email', '')};
+let CAP = {dl:null, sample:null, artifact:false};
+
+/* ---------- OpenAlex / PubMed ---------- */
+const OA = 'https://api.openalex.org';
+const SEL = 'id,doi,display_name,publication_year,authorships,primary_location,referenced_works,cited_by_count,abstract_inverted_index,ids,open_access,best_oa_location,type,is_retracted';
+const short = s => String(s || '').replace(/^https?:\/\/openalex\.org\//i, '');
+class ApiErr extends Error { constructor(kind, status, msg) { super(msg); this.kind = kind; this.status = status; } }
+function oaUrl(path, params = {}) {
+  const u = new URL(OA + path);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  if (cfg.key.trim()) u.searchParams.set('api_key', cfg.key.trim());
+  if (cfg.email.trim()) u.searchParams.set('mailto', cfg.email.trim());
+  return u.toString();
+}
+async function getJSON(url, tries = 4) {
+  for (let a = 0; a < tries; a++) {
+    let r;
+    try { r = await fetch(url); } catch (e) { throw new ApiErr('net', 0, e.message); }
+    if (r.status === 429 || r.status >= 500) { await sleep(1000 * 2 ** a); continue; }
+    if (!r.ok) { let t = ''; try { t = await r.text(); } catch (e) {} throw new ApiErr('http', r.status, t.slice(0, 300)); }
+    return r.json();
+  }
+  throw new ApiErr('rate', 429, '');
+}
+function invAbs(ix) {
+  if (!ix || typeof ix !== 'object') return '';
+  const arr = [];
+  for (const [w, ps] of Object.entries(ix)) for (const p of ps) arr[p] = w;
+  return arr.filter(x => x != null).join(' ');
+}
+function toNode(w) {
+  const b = w.best_oa_location || {};
+  return {
+    id:short(w.id), doi:String(w.doi || '').replace(/^https?:\/\/(dx\.)?doi\.org\//i, ''), title:w.display_name || '(không có tiêu đề)',
+    year:w.publication_year || null, authors:(w.authorships || []).map(a => a && a.author && a.author.display_name).filter(Boolean).slice(0, 40),
+    journal:(w.primary_location && w.primary_location.source && w.primary_location.source.display_name) || '',
+    srcType:(w.primary_location && w.primary_location.source && w.primary_location.source.type) || '',
+    otype:w.type || '', cited:w.cited_by_count || 0, refs:(w.referenced_works || []).map(short),
+    abs:invAbs(w.abstract_inverted_index), pmid:String((w.ids && w.ids.pmid) || '').replace(/\D/g, ''),
+    oa:safeUrl(b.pdf_url) || safeUrl(b.landing_page_url) || safeUrl(w.open_access && w.open_access.oa_url) || '',
+    oaPdf:!!safeUrl(b.pdf_url), retracted:!!w.is_retracted, pubtypes:[]
+  };
+}
+function parseDois(text) {
+  const out = [];
+  for (let m of String(text).match(/10\.\d{4,9}\/[^\s,;"'<>]+/g) || []) { m = m.replace(/[.)\]]+$/, ''); if (!out.includes(m.toLowerCase())) out.push(m.toLowerCase()); }
+  return out;
+}
+async function fetchNetwork(dois, maxCit) {
+  const works = new Map(), seeds = [], citTotal = {}, problems = [];
+  for (const doi of dois) {
+    status('Đang lấy bài gốc ' + doi + '…');
+    try {
+      const w = await getJSON(oaUrl('/works/doi:' + doi, {select:SEL}));
+      const n = toNode(w); works.set(n.id, n); seeds.push(n.id);
+    } catch (e) {
+      if (e.kind === 'http' && e.status === 404) problems.push('Không tìm thấy DOI ' + doi + ' trên OpenAlex.');
+      else throw e;
+    }
+  }
+  if (!seeds.length) throw new ApiErr('none', 404, problems.join(' '));
+  const refIds = [...new Set(seeds.flatMap(id => works.get(id).refs))].filter(id => !works.has(id));
+  for (let i = 0; i < refIds.length; i += 50) {
+    status('Tài liệu tham khảo ' + Math.min(i + 50, refIds.length) + '/' + refIds.length + '…');
+    const r = await getJSON(oaUrl('/works', {filter:'openalex:' + refIds.slice(i, i + 50).join('|'), per_page:100, select:SEL}));
+    for (const w of r.results || []) { const n = toNode(w); if (!works.has(n.id)) works.set(n.id, n); }
+  }
+  for (const sid of seeds) {
+    let page = 1, got = 0;
+    while (got < maxCit) {
+      status('Bài trích dẫn ' + got + (citTotal[sid] ? '/' + Math.min(citTotal[sid], maxCit) : '') + '…');
+      const r = await getJSON(oaUrl('/works', {filter:'cites:' + sid, per_page:100, page, sort:'cited_by_count:desc', select:SEL}));
+      citTotal[sid] = (r.meta && r.meta.count) || 0;
+      const res = r.results || [];
+      for (const w of res.slice(0, maxCit - got)) { const n = toNode(w); if (!works.has(n.id)) works.set(n.id, n); }
+      got += res.length;
+      if (res.length < 100 || got >= citTotal[sid]) break;
+      page++;
+    }
+  }
+  let pubmed = 'ok';
+  const pm = [...works.values()].filter(n => n.pmid);
+  try {
+    for (let i = 0; i < pm.length; i += 150) {
+      status('PubMed: loại bài ' + Math.min(i + 150, pm.length) + '/' + pm.length + '…');
+      const chunk = pm.slice(i, i + 150);
+      let url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&tool=citenet&id=' + chunk.map(n => n.pmid).join(',');
+      if (cfg.email.trim()) url += '&email=' + encodeURIComponent(cfg.email.trim());
+      const r = await getJSON(url, 3);
+      const res = (r && r.result) || {};
+      for (const n of chunk) { const it = res[n.pmid]; if (it && Array.isArray(it.pubtype)) n.pubtypes = it.pubtype.map(String); }
+      await sleep(380);
+    }
+  } catch (e) { pubmed = 'lỗi'; }
+  const ids = new Set(works.keys());
+  const list = [...works.values()].map(n => ({...n, refs:n.refs.filter(r => ids.has(r) && r !== n.id)}));
+  return {app:'CiteNet', v:1, created:new Date().toISOString(), seeds, citTotal, pubmed, problems, works:list};
+}
+
+/* ---------- dataset -> graph ---------- */
+function loadDataset(ds, opts = {}) {
+  if (!ds || !Array.isArray(ds.works) || !Array.isArray(ds.seeds) || !ds.seeds.length) throw new Error('File không đúng định dạng CiteNet.');
+  const overrides = LS.get('ov', {});
+  const nodes = ds.works.map(w => ({
+    id:String(w.id), doi:String(w.doi || ''), title:String(w.title || ''), year:Number(w.year) || null,
+    authors:Array.isArray(w.authors) ? w.authors.map(String) : [], journal:String(w.journal || ''), srcType:String(w.srcType || ''),
+    otype:String(w.otype || ''), cited:Number(w.cited) || 0, refs:Array.isArray(w.refs) ? w.refs.map(String) : [],
+    abs:String(w.abs || ''), pmid:String(w.pmid || '').replace(/\D/g, ''), oa:safeUrl(w.oa), oaPdf:!!w.oaPdf, retracted:!!w.retracted,
+    pubtypes:Array.isArray(w.pubtypes) ? w.pubtypes.map(String) : [], studyOv:w.studyOv && TYPES[w.studyOv.t] ? w.studyOv : null
+  }));
+  const idx = new Map(nodes.map((n, i) => [n.id, i]));
+  const seeds = ds.seeds.map(String).filter(id => idx.has(id));
+  if (!seeds.length) throw new Error('Không tìm thấy bài gốc trong file.');
+  const seedRefs = new Map(seeds.map(id => [id, new Set(nodes[idx.get(id)].refs)]));
+  const edges = [];
+  for (const n of nodes) { n.inN = 0; n.outN = 0; n.refSet = new Set(n.refs); }
+  nodes.forEach((n, i) => { for (const r of n.refs) { const j = idx.get(r); if (j != null && j !== i) edges.push({s:i, t:j}); } });
+  for (const e of edges) { nodes[e.s].outN++; nodes[e.t].inN++; }
+  let maxDeg = 1;
+  for (const n of nodes) {
+    n.isSeed = seeds.includes(n.id);
+    const refOf = seeds.filter(s => s !== n.id && seedRefs.get(s).has(n.id));
+    const cites = seeds.filter(s => s !== n.id && n.refSet.has(s));
+    n.seedLinks = [...new Set([...refOf, ...cites])];
+    n.role = n.isSeed ? 'seed' : n.seedLinks.length >= 2 ? 'multi' : refOf.length && cites.length ? 'both' : refOf.length ? 'ref' : cites.length ? 'cit' : 'ind';
+    n.deg = n.inN + n.outN; if (!n.isSeed) maxDeg = Math.max(maxDeg, n.deg);
+    const ov = overrides[n.id] || n.studyOv;
+    n.study = ov && TYPES[ov.t] ? {t:ov.t, src:ov.src || 'Người dùng', why:ov.why || ''} : classify(n);
+    n.score = scoreOf(n);
+    n.app = 0;
+  }
+  Object.assign(S, {nodes, edges, idx, seeds, maxDeg, sel:null, yearCut:null, demo:!!opts.demo,
+    meta:{citTotal:ds.citTotal || {}, pubmed:ds.pubmed || '', created:ds.created || '', problems:ds.problems || []}});
+  const ys = nodes.map(n => n.year).filter(Boolean);
+  S.minY = ys.length ? Math.min(...ys) : CURY; S.maxY = ys.length ? Math.max(...ys) : CURY;
+  S.raw = ds;
+  initLayout();
+  $('#empty').hidden = true; $('#toolsSec').hidden = false; $('#timeline').hidden = false;
+  $('#demoFlag').hidden = !S.demo;
+  const yr = $('#year'); yr.min = S.minY; yr.max = S.maxY; yr.value = S.maxY;
+  refreshAll();
+  if (!opts.demo && !opts.noSave) LS.set('last', ds);
+}
+function datasetOut() {
+  return {...S.raw, works:S.nodes.map(n => ({id:n.id, doi:n.doi, title:n.title, year:n.year, authors:n.authors, journal:n.journal, srcType:n.srcType,
+    otype:n.otype, cited:n.cited, refs:n.refs, abs:n.abs, pmid:n.pmid, oa:n.oa, oaPdf:n.oaPdf, retracted:n.retracted, pubtypes:n.pubtypes,
+    studyOv:['Người dùng', 'Claude (AI)'].includes(n.study.src) ? n.study : undefined}))};
+}
+
+/* ---------- layout (3D force) ---------- */
+function rng(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const ROLE_R = {ref:115, cit:200, both:150, multi:70, ind:240};
+function initLayout() {
+  const R = rng(7), k = S.seeds.length, seedPos = new Map();
+  S.seeds.forEach((id, i) => { const a = i / k * Math.PI * 2, rad = k === 1 ? 0 : 140 + 40 * k; seedPos.set(id, [Math.cos(a) * rad, (i % 2 ? 40 : -40) * (k > 1), Math.sin(a) * rad]); });
+  for (const n of S.nodes) {
+    n.vx = n.vy = n.vz = 0;
+    if (n.isSeed) { [n.x, n.y, n.z] = seedPos.get(n.id); continue; }
+    let bx = 0, by = 0, bz = 0; const L = n.seedLinks.length ? n.seedLinks : S.seeds;
+    for (const s of L) { const p = seedPos.get(s); bx += p[0]; by += p[1]; bz += p[2]; }
+    bx /= L.length; by /= L.length; bz /= L.length;
+    const u = R() * 2 - 1, th = R() * Math.PI * 2, rr = Math.sqrt(1 - u * u), rad = (ROLE_R[n.role] || 180) * (0.75 + R() * 0.5);
+    n.x = bx + rr * Math.cos(th) * rad; n.y = by + u * rad; n.z = bz + rr * Math.sin(th) * rad;
+  }
+  S.alpha = 1;
+  S.seedPos = seedPos;
+}
+function tick(a) {
+  const N = S.nodes, n = N.length, REP = 1600 * a;
+  for (let i = 0; i < n; i++) {
+    const A = N[i];
+    for (let j = i + 1; j < n; j++) {
+      const B = N[j]; let dx = A.x - B.x, dy = A.y - B.y, dz = A.z - B.z, d2 = dx * dx + dy * dy + dz * dz + 1;
+      if (d2 > 90000) continue;
+      const d = Math.sqrt(d2), f = REP / (d2 * d); dx *= f; dy *= f; dz *= f;
+      A.vx += dx; A.vy += dy; A.vz += dz; B.vx -= dx; B.vy -= dy; B.vz -= dz;
+    }
+  }
+  const K = 0.04 * a;
+  for (const e of S.edges) {
+    const A = N[e.s], B = N[e.t];
+    const L = A.isSeed ? ROLE_R[B.role] || 120 : B.isSeed ? ROLE_R[A.role] || 120 : 70;
+    const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.01, f = (d - L) / d * K;
+    const wa = A.isSeed ? 0 : B.isSeed ? 1 : 0.5, wb = B.isSeed ? 0 : A.isSeed ? 1 : 0.5;
+    A.vx += dx * f * wa; A.vy += dy * f * wa; A.vz += dz * f * wa; B.vx -= dx * f * wb; B.vy -= dy * f * wb; B.vz -= dz * f * wb;
+  }
+  for (const A of N) {
+    if (A.isSeed) { const p = S.seedPos.get(A.id); A.x = p[0]; A.y = p[1]; A.z = p[2]; A.vx = A.vy = A.vz = 0; continue; }
+    A.vx -= A.x * 0.004 * a; A.vy -= A.y * 0.004 * a; A.vz -= A.z * 0.004 * a;
+    A.vx *= 0.6; A.vy *= 0.6; A.vz *= 0.6;
+    A.x += A.vx; A.y += A.vy; A.z += A.vz;
+  }
+}
+
+/* ---------- rendering ---------- */
+const cv = $('#cv'), ctx = cv.getContext('2d'), stage = $('#stage');
+let W = 0, H = 0, DPR = 1;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cam = {yaw:0.5, pitch:-0.22, zoom:1, panX:0, panY:0, flat:1, is2D:false, auto:!reduced, R:260, goal:null};
+const sprites = new Map();
+function sprite(c) {
+  if (sprites.has(c)) return sprites.get(c);
+  const s = document.createElement('canvas'); s.width = s.height = 64; const g = s.getContext('2d');
+  const gr = g.createRadialGradient(24, 22, 2, 32, 32, 31);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.18, c); gr.addColorStop(0.85, shade(c, -0.35)); gr.addColorStop(1, shade(c, -0.55));
+  g.fillStyle = gr; g.beginPath(); g.arc(32, 32, 31, 0, Math.PI * 2); g.fill();
+  sprites.set(c, s); return s;
+}
+function shade(hex, p) { const n = parseInt(hex.slice(1), 16); const f = v => Math.max(0, Math.min(255, Math.round(v + v * p))); return 'rgb(' + f(n >> 16) + ',' + f(n >> 8 & 255) + ',' + f(n & 255) + ')'; }
+function lerpHex(a, b, t) { const A = parseInt(a.slice(1), 16), B = parseInt(b.slice(1), 16); const c = (s) => Math.round(((A >> s) & 255) * (1 - t) + ((B >> s) & 255) * t); return '#' + [16, 8, 0].map(s => c(s).toString(16).padStart(2, '0')).join(''); }
+const RAMP = ['#3b4fd8', '#4fc1c6', '#f7e463', '#e8452c'];
+function yearColor(y) { if (!y) return '#4a6a8c'; const t = S.maxY > S.minY ? (y - S.minY) / (S.maxY - S.minY) : 1; const k = Math.min(2.999, t * 3), i = Math.floor(k); return lerpHex(RAMP[i], RAMP[i + 1], k - i); }
+function colorOf(n) {
+  if (S.mode === 'type') return TYPES[n.study.t].c;
+  if (S.mode === 'tier') return tierOf(n.score.v).c;
+  if (S.mode === 'year') return yearColor(n.year);
+  return ROLES[n.role].c;
+}
+function resize() {
+  const r = stage.getBoundingClientRect(); DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+}
+const ro = new ResizeObserver(resize); ro.observe(stage); resize();
+function project() {
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const F = Math.min(W, H) * 0.95 * cam.zoom, D = cam.R * 2.6, s0 = F / D;
+  for (const n of S.nodes) {
+    const x = n.x, y = n.y, z = n.z * cam.flat;
+    const x1 = x * cy - z * sy, z1 = x * sy + z * cy, y1 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+    const s = F / Math.max(D * 0.2, D + z2);
+    n.px = W / 2 + cam.panX + x1 * s; n.py = H / 2 + cam.panY + y1 * s; n.pz = z2; n.ps = s / s0;
+    const base = n.isSeed ? 15 : 3.5 + 8.5 * Math.sqrt(n.deg / S.maxDeg);
+    n.sz = base * Math.pow(n.ps, 0.9) * Math.min(1.4, Math.max(0.55, cam.zoom ** 0.5)) * n.app;
+  }
+}
+let order = [];
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (!S.nodes.length) return;
+  project();
+  const N = S.nodes, sel = S.sel && S.sel.app > 0.05 ? S.sel : null, q = S.q;
+  const nb = sel ? new Set() : null;
+  if (sel) { const si = S.idx.get(sel.id); for (const e of S.edges) { if (e.s === si) nb.add(e.t); if (e.t === si) nb.add(e.s); } nb.add(si); }
+  const lit = (i) => { const n = N[i]; if (n.app < 0.05) return false; if (nb && !nb.has(i)) return false; if (q && !n._m) return false; return true; };
+  // edges
+  ctx.lineWidth = 0.7; ctx.strokeStyle = sel || q ? 'rgba(170,215,255,0.06)' : 'rgba(170,225,215,0.22)'; ctx.beginPath();
+  const arrows = [];
+  for (const e of S.edges) {
+    const A = N[e.s], B = N[e.t]; if (A.app < 0.05 || B.app < 0.05) continue;
+    if (sel && (A === sel || B === sel)) continue;
+    ctx.moveTo(A.px, A.py); ctx.lineTo(B.px, B.py);
+    if (S.edges.length < 1600 && !sel && !q) arrows.push(e);
+  }
+  ctx.stroke();
+  if (arrows.length) { ctx.fillStyle = 'rgba(170,225,215,0.35)'; ctx.beginPath(); for (const e of arrows) arrowHead(N[e.s], N[e.t], 4.5); ctx.fill(); }
+  if (sel) {
+    const si = S.idx.get(sel.id);
+    for (const [cond, col] of [[e => e.s === si, '#8fd3ff'], [e => e.t === si, '#f7e463']]) {
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.5; ctx.beginPath();
+      const hs = [];
+      for (const e of S.edges) { if (!cond(e)) continue; const A = N[e.s], B = N[e.t]; if (A.app < 0.05 || B.app < 0.05) continue; ctx.moveTo(A.px, A.py); ctx.lineTo(B.px, B.py); hs.push(e); }
+      ctx.stroke(); ctx.beginPath(); for (const e of hs) arrowHead(N[e.s], N[e.t], 7); ctx.fill();
+    }
+  }
+  // nodes, far to near
+  order = N.map((n, i) => i).filter(i => N[i].app > 0.02).sort((a, b) => N[b].pz - N[a].pz);
+  for (const i of order) {
+    const n = N[i], r = Math.max(1.2, n.sz);
+    ctx.globalAlpha = lit(i) ? 1 : 0.16;
+    if (n.isSeed) { const g = ctx.createRadialGradient(n.px, n.py, r, n.px, n.py, r * 2.6); g.addColorStop(0, 'rgba(255,92,138,0.45)'); g.addColorStop(1, 'rgba(255,92,138,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(n.px, n.py, r * 2.6, 0, 7); ctx.fill(); }
+    ctx.drawImage(sprite(colorOf(n)), n.px - r, n.py - r, r * 2, r * 2);
+    if (n.retracted) { ctx.strokeStyle = '#e8452c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(n.px, n.py, r + 2.5, 0, 7); ctx.stroke(); }
+    if (n === sel) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(n.px, n.py, r + 4, 0, 7); ctx.stroke(); }
+    else if (q && n._m) { ctx.strokeStyle = '#ff5c8a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(n.px, n.py, r + 3, 0, 7); ctx.stroke(); }
+  }
+  ctx.globalAlpha = 1;
+}
+function arrowHead(A, B, s) {
+  const dx = B.px - A.px, dy = B.py - A.py, d = Math.hypot(dx, dy); if (d < B.sz + s + 2) return;
+  const ux = dx / d, uy = dy / d, tx = B.px - ux * (B.sz + 1), ty = B.py - uy * (B.sz + 1);
+  ctx.moveTo(tx, ty); ctx.lineTo(tx - ux * s - uy * s * 0.5, ty - uy * s + ux * s * 0.5); ctx.lineTo(tx - ux * s + uy * s * 0.5, ty - uy * s - ux * s * 0.5); ctx.closePath();
+}
+let fcount = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  if (!S.nodes.length) return;
+  const n = S.nodes.length;
+  if (S.alpha > 0.015) {
+    const tpf = Math.max(1, Math.min(8, Math.floor(2.5e6 / (n * n / 2 + 1))));
+    for (let k = 0; k < tpf && S.alpha > 0.015; k++) { tick(S.alpha); S.alpha *= 0.985; }
+    if (++fcount % 8 === 0) fitRadius();
+  }
+  if (cam.auto && !cam.is2D) cam.yaw += 0.0022;
+  const ft = cam.is2D ? 0 : 1; cam.flat += (ft - cam.flat) * 0.12;
+  if (cam.is2D) { cam.yaw += (0 - cam.yaw) * 0.12; cam.pitch += (0 - cam.pitch) * 0.12; }
+  if (cam.goal) { cam.panX += (cam.goal.x - cam.panX) * 0.15; cam.panY += (cam.goal.y - cam.panY) * 0.15; if (Math.abs(cam.goal.x - cam.panX) < 0.5 && Math.abs(cam.goal.y - cam.panY) < 0.5) cam.goal = null; }
+  for (const m of S.nodes) { const t = m._vis ? 1 : 0; if (m.app !== t) m.app += (t - m.app) * (reduced ? 1 : 0.14); if (Math.abs(m.app - t) < 0.01) m.app = t; }
+  draw();
+}
+function fitRadius() {
+  const d = S.nodes.map(n => Math.hypot(n.x, n.y, n.z)).sort((a, b) => a - b);
+  const r95 = d[Math.floor(d.length * 0.95)] || 200;
+  cam.R += (Math.max(120, r95) - cam.R) * 0.5;
+}
+requestAnimationFrame(frame);
+
+/* ---------- interaction ---------- */
+const tip = $('#tip');
+const ptrs = new Map(); let drag = null, pinch = null;
+const pos = e => { const r = cv.getBoundingClientRect(); return {x:e.clientX - r.left, y:e.clientY - r.top}; };
+function pick(x, y) {
+  let best = null, bz = Infinity;
+  for (const i of order) { const n = S.nodes[i]; if (n.app < 0.5) continue; const r = Math.max(7, n.sz + 3); const dx = x - n.px, dy = y - n.py; if (dx * dx + dy * dy < r * r && n.pz < bz) { best = n; bz = n.pz; } }
+  return best;
+}
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('pointerdown', e => {
+  try { cv.setPointerCapture(e.pointerId); } catch (er) {}
+  const p = pos(e); ptrs.set(e.pointerId, p);
+  if (ptrs.size === 1) drag = {x:p.x, y:p.y, btn:e.button, shift:e.shiftKey, moved:false};
+  else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d:Math.hypot(a.x - b.x, a.y - b.y), zoom:cam.zoom, mx:(a.x + b.x) / 2, my:(a.y + b.y) / 2}; drag = null; }
+});
+cv.addEventListener('pointermove', e => {
+  const p = pos(e);
+  if (ptrs.has(e.pointerId)) {
+    ptrs.set(e.pointerId, p);
+    if (pinch && ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      cam.zoom = Math.max(0.3, Math.min(8, pinch.zoom * d / Math.max(10, pinch.d)));
+      cam.panX += mx - pinch.mx; cam.panY += my - pinch.my; pinch.mx = mx; pinch.my = my; cam.auto = false; cam.goal = null;
+    } else if (drag) {
+      const dx = p.x - drag.x, dy = p.y - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; cam.auto = false; cam.goal = null; }
+      if (drag.moved) {
+        if (drag.btn === 2 || drag.shift || cam.is2D) { cam.panX += dx; cam.panY += dy; }
+        else { cam.yaw += dx * 0.006; cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.006)); }
+      }
+      drag.x = p.x; drag.y = p.y;
+    }
+    tip.hidden = true;
+    return;
+  }
+  const n = pick(p.x, p.y);
+  if (n) { tip.textContent = n.title + (n.year ? ' (' + n.year + ')' : ''); tip.hidden = false; const tw = tip.offsetWidth; tip.style.left = Math.min(W - tw - 8, p.x + 14) + 'px'; tip.style.top = Math.max(8, p.y - 40) + 'px'; cv.style.cursor = 'pointer'; }
+  else { tip.hidden = true; cv.style.cursor = ''; }
+});
+function endPtr(e) {
+  if (drag && !drag.moved && ptrs.size === 1 && e.type === 'pointerup' && drag.btn === 0) { const p = pos(e); select(pick(p.x, p.y), false); }
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null;
+}
+cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
+cv.addEventListener('pointerleave', () => { tip.hidden = true; });
+cv.addEventListener('wheel', e => {
+  e.preventDefault(); const p = pos(e), old = cam.zoom;
+  cam.zoom = Math.max(0.3, Math.min(8, cam.zoom * Math.exp(-e.deltaY * 0.0015)));
+  const ratio = cam.zoom / old, cx = W / 2 + cam.panX, cy = H / 2 + cam.panY;
+  cam.panX += (p.x - cx) * (1 - ratio); cam.panY += (p.y - cy) * (1 - ratio); cam.goal = null;
+}, {passive:false});
+if (matchMedia('(pointer: coarse)').matches) $('#hint').textContent = 'Tự xoay đến khi bạn chạm · kéo một ngón để xoay · hai ngón để dời và phóng · chạm vào nút để truy vết';
+
+function select(n, center) {
+  S.sel = n || null;
+  if (n) { cam.auto = false; if (center) { project(); cam.goal = {x:cam.panX - (n.px - W / 2), y:cam.panY - (n.py - H / 2)}; } setTab('detail'); }
+  renderDetail(); renderList();
+}
+
+/* ---------- UI ---------- */
+function status(t) { $('#status').hidden = !t; if (t) $('#statusTxt').textContent = t; }
+function msg(t, err) { const m = $('#msg'); m.textContent = t || ''; m.classList.toggle('err', !!err); }
+function applyVis() {
+  for (const n of S.nodes) {
+    const yearOk = S.yearCut == null || !n.year || n.year <= S.yearCut;
+    const pass = n.isSeed || (!F.hide.role.has(n.role) && !F.hide.type.has(n.study.t) && !F.hide.tier.has(tierOf(n.score.v).k)
+      && n.score.v >= F.minScore && (!F.oa || n.oa) && (!F.noRetr || !n.retracted));
+    n._vis = yearOk && pass;
+    n._m = S.q ? n._hay.includes(S.q) : false;
+  }
+}
+function refreshAll() {
+  for (const n of S.nodes) n._hay = norm(n.title + ' ' + n.authors.join(' ') + ' ' + n.doi + ' ' + n.journal + ' ' + n.year);
+  applyVis(); renderStats(); renderLegend(); renderDetail(); renderList(); renderFilter(); updateYearLbl();
+}
+function renderStats() {
+  const N = S.nodes, others = N.length - S.seeds.length;
+  const absN = N.filter(n => n.abs).length, oaN = N.filter(n => n.oa).length, rt = N.filter(n => n.retracted).length;
+  const chips = [others + ' bài liên quan', S.edges.length + ' liên kết trích dẫn', absN + ' có tóm tắt', oaN + ' có bản truy cập mở'];
+  if (rt) chips.push(rt + ' bài đã bị rút');
+  for (const sid of S.seeds) { const tot = S.meta.citTotal[sid]; const got = N.filter(n => n.refSet.has(sid)).length; if (tot && tot > got) chips.push('Đã lấy ' + got + '/' + tot + ' bài trích dẫn'); }
+  if (S.meta.pubmed === 'lỗi') chips.push('PubMed không phản hồi');
+  $('#stats').innerHTML = chips.map(c => '<span class="chip">' + esc(c) + '</span>').join('');
+}
+function renderLegend() {
+  const N = S.nodes, el = $('#legend');
+  if (S.mode === 'year') {
+    el.innerHTML = '<div class="ramp"></div><div class="rampl"><span>' + esc(S.minY) + '</span><span>' + esc(S.maxY) + '</span></div>';
+    return;
+  }
+  let items;
+  if (S.mode === 'role') items = Object.entries(ROLES).map(([k, r]) => [k, r.l, r.c, N.filter(n => n.role === k).length]);
+  else if (S.mode === 'type') items = Object.entries(TYPES).map(([k, t]) => [k, t.l, t.c, N.filter(n => n.study.t === k).length]);
+  else items = TIERS.map(t => [t.k, t.l, t.c, N.filter(n => tierOf(n.score.v).k === t.k).length]);
+  items = items.filter(i => i[3] > 0);
+  const hid = F.hide[S.mode];
+  el.innerHTML = items.map(([k, l, c, n]) => '<button type="button" data-k="' + esc(k) + '" class="' + (hid.has(k) ? 'off' : '') + '" aria-pressed="' + !hid.has(k) + '"><span class="dot" style="background:' + c + '"></span><span>' + esc(l) + '</span><span class="n">' + n + '</span></button>').join('');
+}
+$('#legend').addEventListener('click', e => {
+  const b = e.target.closest('button[data-k]'); if (!b || S.mode === 'year') return;
+  const k = b.dataset.k, h = F.hide[S.mode]; if (k === 'seed') return;
+  h.has(k) ? h.delete(k) : h.add(k); applyVis(); renderLegend(); renderList(); renderFilter();
+});
+function chip(t, c) { return '<span class="chip' + (c ? ' on' : '') + '"' + (c ? ' style="background:' + c + '"' : '') + '>' + esc(t) + '</span>'; }
+function renderDetail() {
+  const el = $('#tab-detail'), n = S.sel;
+  if (!n) {
+    const sd = S.seeds.map(id => S.nodes[S.idx.get(id)]);
+    el.innerHTML = '<p class="meta">Chạm vào một nút trên đồ thị hoặc một dòng trong Danh sách để xem chi tiết và truy vết trích dẫn.</p>' +
+      sd.map(s => '<p><button class="btn" type="button" data-pick="' + esc(s.id) + '">Xem bài gốc: ' + esc(s.title.slice(0, 70)) + (s.title.length > 70 ? '…' : '') + '</button></p>').join('');
+    return;
+  }
+  const T = TYPES[n.study.t], tr = tierOf(n.score.v), con = (n.deg / S.maxDeg);
+  const au = n.authors.length > 6 ? n.authors.slice(0, 6).join(', ') + ' và cs.' : n.authors.join(', ');
+  const links = [];
+  if (n.doi) links.push('<a href="https://doi.org/' + esc(encodeURI(n.doi)) + '" target="_blank" rel="noopener">' + esc(n.doi) + '</a>');
+  if (n.pmid) links.push('<a href="https://pubmed.ncbi.nlm.nih.gov/' + esc(n.pmid) + '/" target="_blank" rel="noopener">PMID ' + esc(n.pmid) + '</a>');
+  const opts = Object.entries(TYPES).map(([k, t]) => '<option value="' + k + '"' + (k === n.study.t ? ' selected' : '') + '>' + esc(t.l) + '</option>').join('');
+  el.innerHTML =
+    '<h2>' + esc(n.title) + '</h2>' +
+    '<p class="meta">' + esc(au || 'Không rõ tác giả') + (n.year ? ' · ' + esc(n.year) : '') + '</p>' +
+    (n.journal ? '<p class="meta">' + esc(n.journal) + '</p>' : '') +
+    '<p class="meta">' + links.join(' · ') + '</p>' +
+    (n.retracted ? '<div class="warn">Bài này đã bị rút (retracted). Không nên dùng làm bằng chứng.</div>' : '') +
+    '<div class="chips" style="margin-top:10px">' + chip(ROLES[n.role].l, ROLES[n.role].c) + chip(T.l, T.c) + chip('Tin cậy ' + tr.k, tr.c) +
+      chip('Trích dẫn ' + n.cited.toLocaleString('vi-VN')) + chip('Trong mạng: ' + n.inN + ' đến · ' + n.outN + ' đi') + chip('Độ kết nối ' + (n.isSeed ? '1.00' : con.toFixed(2))) + '</div>' +
+    (n.oa ? '<p><a class="btn" style="display:inline-flex;align-items:center;text-decoration:none" href="' + esc(n.oa) + '" target="_blank" rel="noopener">' + (n.oaPdf ? 'Mở PDF truy cập mở' : 'Mở bản truy cập mở') + '</a></p>' : '<p class="note">Không tìm thấy bản truy cập mở hợp pháp.</p>') +
+    '<div class="row"><div><label for="typeSel">Thiết kế nghiên cứu (sửa nếu sai)</label><select id="typeSel">' + opts + '</select><p class="note">Nguồn phân loại: ' + esc(n.study.src) + (n.study.why ? ' · ' + esc(n.study.why) : '') + (n.pubtypes.length ? ' · PubMed: ' + esc(n.pubtypes.join(', ')) : '') + '</p></div></div>' +
+    '<div class="score"><b>' + n.score.v + '</b><span>/100 · mức ' + esc(tr.l) + '</span></div>' +
+    '<div class="parts">' + n.score.parts.map(p => '<div class="part"><span>' + esc(p.k) + '</span><span>' + p.v + '/' + p.max + '</span><span class="bar"><i style="width:' + Math.round(p.v / p.max * 100) + '%"></i></span><small>' + esc(p.note) + '</small></div>').join('') + '</div>' +
+    (n.isSeed ? seedInfo(n) : '') +
+    (n.abs ? '<details open style="margin-top:14px"><summary>Tóm tắt</summary><p class="abs">' + esc(n.abs) + '</p></details>' : '<p class="note" style="margin-top:14px">Không có tóm tắt trên OpenAlex.</p>') +
+    (n.doi && !CAP.artifact && !S.demo ? '<p><button class="btn" type="button" id="reseed">Dựng mạng mới quanh bài này</button></p>' : '');
+}
+function seedInfo(n) {
+  const refsIn = n.refs.length, cits = S.nodes.filter(m => m.refSet.has(n.id)).length, tot = S.meta.citTotal[n.id];
+  return '<p class="meta" style="margin-top:12px">Tài liệu tham khảo trong mạng: ' + refsIn + ' · Bài trích dẫn đã lấy: ' + cits + (tot ? ' / ' + tot + ' trên OpenAlex' : '') + '</p>';
+}
+$('#tab-detail').addEventListener('change', e => {
+  if (e.target.id !== 'typeSel' || !S.sel) return;
+  const n = S.sel; n.study = {t:e.target.value, src:'Người dùng'}; n.score = scoreOf(n);
+  const ov = LS.get('ov', {}); ov[n.id] = n.study; LS.set('ov', ov);
+  if (!S.demo) LS.set('last', datasetOut());
+  applyVis(); renderLegend(); renderDetail(); renderList(); renderFilter();
+});
+$('#tab-detail').addEventListener('click', e => {
+  const b = e.target.closest('[data-pick]'); if (b) { select(S.nodes[S.idx.get(b.dataset.pick)], true); return; }
+  if (e.target.id === 'reseed' && S.sel) { $('#doi').value = S.sel.doi; $('#doiForm').requestSubmit(); }
+});
+function visibleSorted() {
+  const k = S.sortKey, d = S.sortDir;
+  const val = n => k === 'score' ? n.score.v : k === 'year' ? (n.year || 0) : k === 'cited' ? n.cited : k === 'deg' ? n.deg : norm(n.title);
+  return S.nodes.filter(n => n._vis && (!S.q || n._m)).sort((a, b) => { const x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * d; });
+}
+function renderList() {
+  const el = $('#tab-list'); if (S.tab !== 'list' && el.hidden) { el._stale = true; return; }
+  const rows = visibleSorted(), lim = rows.slice(0, 300);
+  const th = (k, l, cls) => '<th class="' + (cls || '') + '" data-sort="' + k + '">' + l + (S.sortKey === k ? (S.sortDir < 0 ? ' ↓' : ' ↑') : '') + '</th>';
+  el.innerHTML = '<p class="meta">' + rows.length + ' bài đang hiển thị' + (rows.length > 300 ? ' (liệt kê 300 bài đầu)' : '') + '. Chạm tiêu đề cột để sắp xếp.</p>' +
+    '<table class="stack"><thead><tr>' + th('title', 'Bài báo') + th('score', 'Điểm', 'num') + th('year', 'Năm', 'num') + th('cited', 'Trích dẫn', 'num') + '</tr></thead><tbody>' +
+    lim.map(n => '<tr data-id="' + esc(n.id) + '" class="' + (n === S.sel ? 'sel' : '') + '"><td><span class="t1">' + (n.retracted ? '[Đã rút] ' : '') + esc(n.title) + '</span><span class="t2">' + esc((n.authors[0] || '') + (n.authors.length > 1 ? ' và cs.' : '')) + ' · ' + esc(ROLES[n.role].l) + ' · ' + esc(TYPES[n.study.t].l) + '</span></td><td class="num">' + n.score.v + ' ' + tierOf(n.score.v).k + '</td><td class="num">' + esc(n.year || '–') + '</td><td class="num">' + n.cited.toLocaleString('vi-VN') + '</td></tr>').join('') +
+    '</tbody></table>';
+  el._stale = false;
+}
+$('#tab-list').addEventListener('click', e => {
+  const h = e.target.closest('th[data-sort]');
+  if (h) { const k = h.dataset.sort; if (S.sortKey === k) S.sortDir *= -1; else { S.sortKey = k; S.sortDir = k === 'title' ? 1 : -1; } renderList(); return; }
+  const tr = e.target.closest('tr[data-id]'); if (tr) select(S.nodes[S.idx.get(tr.dataset.id)], true);
+});
+function renderFilter() {
+  const vis = S.nodes.filter(n => n._vis).length;
+  $('#expCount').textContent = 'Xuất các bài đang hiển thị: ' + vis + ' bài (đổi bằng chú giải, bộ lọc và thanh năm).';
+  const unk = S.nodes.filter(n => n.study.t === 'unk').length;
+  $('#unkN').textContent = unk; $('#aiSec').hidden = !(CAP.sample && unk > 0); $('#aiBtn').disabled = !unk;
+}
+function setTab(t) {
+  S.tab = t;
+  for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.tab === t));
+  for (const k of ['detail', 'list', 'filter']) $('#tab-' + k).hidden = k !== t;
+  if (t === 'list') renderList();
+}
+document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab); });
+$('#mode').addEventListener('change', e => { S.mode = e.target.value; renderLegend(); });
+$('#q').addEventListener('input', e => { S.q = norm(e.target.value.trim()); applyVis(); renderList(); });
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const m = visibleSorted()[0]; if (m) select(m, true); } });
+$('#reset').addEventListener('click', () => { initLayout(); Object.assign(cam, {zoom:1, panX:0, panY:0, goal:null, auto:!reduced && !cam.is2D}); S.sel = null; renderDetail(); renderList(); });
+$('#dim').addEventListener('click', () => { cam.is2D = !cam.is2D; $('#dim').textContent = cam.is2D ? '3D' : '2D'; $('#dim').classList.toggle('on', cam.is2D); if (cam.is2D) cam.auto = false; });
+$('#minScore').addEventListener('input', e => { F.minScore = +e.target.value; $('#minScoreLbl').textContent = F.minScore; applyVis(); renderList(); renderFilter(); });
+$('#oaOnly').addEventListener('change', e => { F.oa = e.target.checked; applyVis(); renderList(); renderFilter(); });
+$('#noRetr').addEventListener('change', e => { F.noRetr = e.target.checked; applyVis(); renderList(); renderFilter(); });
+
+/* ---------- timeline ---------- */
+let playT = null;
+function updateYearLbl() {
+  const v = +$('#year').value, cnt = S.nodes.filter(n => n._vis).length;
+  $('#yearLbl').textContent = (S.yearCut == null ? 'Tất cả năm' : 'Đến năm ' + v) + ' · ' + cnt + ' bài';
+}
+function setYear(v) { $('#year').value = v; S.yearCut = v >= S.maxY ? null : v; applyVis(); updateYearLbl(); renderFilter(); if (S.tab === 'list') renderList(); }
+$('#year').addEventListener('input', e => { stopPlay(); setYear(+e.target.value); });
+function stopPlay() { if (playT) { clearInterval(playT); playT = null; } $('#playIco').innerHTML = '<path d="M4 2l12 7-12 7z" fill="currentColor"/>'; $('#play').setAttribute('aria-label', 'Phát diễn tiến theo năm'); }
+$('#play').addEventListener('click', () => {
+  if (playT) { stopPlay(); return; }
+  let y = S.yearCut == null ? S.minY : S.yearCut;
+  setYear(y);
+  $('#playIco').innerHTML = '<path d="M4 2h4v14H4zM10 2h4v14h-4z" fill="currentColor"/>'; $('#play').setAttribute('aria-label', 'Dừng');
+  const step = Math.max(1, Math.ceil((S.maxY - S.minY) / 40));
+  playT = setInterval(() => { y = Math.min(S.maxY, y + step); setYear(y); if (y >= S.maxY) stopPlay(); }, reduced ? 900 : 650);
+});
+
+/* ---------- export ---------- */
+async function saveFile(name, text, mime) {
+  const em = $('#expMsg');
+  if (CAP.dl) {
+    try { await CAP.dl.save({filename:name, data:text}); em.textContent = 'Đã lưu ' + name + '.'; em.classList.remove('err'); }
+    catch (e) {
+      const c = e && e.code;
+      em.classList.add('err');
+      em.textContent = c === 'declined' ? 'Đã huỷ lưu file.' : c === 'host_unavailable' ? 'Ứng dụng này không lưu được file; hãy mở trang trên trình duyệt hoặc máy tính.' : 'Không lưu được file (' + (c || 'lỗi') + ').';
+    }
+    return;
+  }
+  if (CAP.artifact) { em.textContent = 'Trang này không lưu được file ở đây. Hãy mở trên trình duyệt máy tính, hoặc dùng bản chạy độc lập CiteNet.html.'; em.classList.add('err'); return; }
+  try {
+    const url = URL.createObjectURL(new Blob([text], {type:mime}));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    em.textContent = 'Đã tạo file ' + name + '.'; em.classList.remove('err');
+  } catch (e) { em.textContent = 'Không tạo được file.'; em.classList.add('err'); }
+}
+const visNodes = () => S.nodes.filter(n => n._vis);
+const stamp = () => new Date().toISOString().slice(0, 10);
+$('#expRis').addEventListener('click', () => {
+  const L = [];
+  for (const n of visNodes()) {
+    L.push('TY  - ' + (n.otype === 'review' || n.otype === 'article' || !n.otype ? 'JOUR' : n.otype === 'book-chapter' ? 'CHAP' : n.otype === 'preprint' ? 'UNPB' : 'JOUR'));
+    L.push('TI  - ' + n.title.replace(/\s+/g, ' '));
+    for (const a of n.authors) L.push('AU  - ' + a);
+    if (n.year) L.push('PY  - ' + n.year);
+    if (n.journal) L.push('JO  - ' + n.journal);
+    if (n.doi) { L.push('DO  - ' + n.doi); L.push('UR  - https://doi.org/' + n.doi); }
+    if (n.pmid) L.push('AN  - PMID:' + n.pmid);
+    if (n.abs) L.push('AB  - ' + n.abs.replace(/\s+/g, ' '));
+    L.push('N1  - CiteNet: ' + ROLES[n.role].l + '; ' + TYPES[n.study.t].l + '; điểm ' + n.score.v + ' (' + tierOf(n.score.v).k + ')' + (n.retracted ? '; ĐÃ BỊ RÚT' : ''));
+    L.push('ER  - ', '');
+  }
+  saveFile('citenet-' + stamp() + (CAP.dl ? '-ris.txt' : '.ris'), L.join('\r\n'), 'application/x-research-info-systems');
+});
+$('#expCsv').addEventListener('click', () => {
+  const cols = ['openalex_id', 'doi', 'pmid', 'title', 'authors', 'year', 'journal', 'role', 'study_type', 'type_source', 'score', 'tier', 'cited_by', 'network_in', 'network_out', 'open_access_url', 'retracted'];
+  const q = v => { const s = String(v ?? ''); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const rows = visNodes().map(n => [n.id, n.doi, n.pmid, n.title, n.authors.join('; '), n.year || '', n.journal, ROLES[n.role].l, TYPES[n.study.t].l, n.study.src, n.score.v, tierOf(n.score.v).k, n.cited, n.inN, n.outN, n.oa, n.retracted ? 'có' : ''].map(q).join(','));
+  saveFile('citenet-' + stamp() + '.csv', '\ufeff' + [cols.join(','), ...rows].join('\r\n'), 'text/csv');
+});
+$('#expJson').addEventListener('click', () => saveFile('citenet-' + stamp() + '.json', JSON.stringify(datasetOut()), 'application/json'));
+$('#expPdf').addEventListener('click', () => {
+  const L = visNodes().filter(n => n.oa).map(n => n.oa + '\t' + (n.doi || n.id) + '\t' + n.title.replace(/\s+/g, ' '));
+  if (!L.length) { $('#expMsg').textContent = 'Không có bài nào có bản truy cập mở trong nhóm đang hiển thị.'; return; }
+  saveFile('citenet-pdf-' + stamp() + '.txt', '# Link bản truy cập mở hợp pháp (OpenAlex). Dùng trình quản lý tải xuống hoặc Zotero để tải hàng loạt.\r\n' + L.join('\r\n'), 'text/plain');
+});
+
+/* ---------- AI classification (inside Claude) ---------- */
+$('#aiBtn').addEventListener('click', async () => {
+  const am = $('#aiMsg'), btn = $('#aiBtn'), list = S.nodes.filter(n => n.study.t === 'unk');
+  if (!CAP.sample || !list.length) return;
+  btn.disabled = true; let done = 0, changed = 0;
+  const codes = Object.keys(TYPES).map(k => k + ' = ' + TYPES[k].l).join('; ');
+  try {
+    for (let i = 0; i < list.length; i += 15) {
+      const batch = list.slice(i, i + 15);
+      am.textContent = 'Claude đang đọc ' + (i + 1) + '–' + (i + batch.length) + ' / ' + list.length + ' bài…'; am.classList.remove('err');
+      const prompt = 'Bạn là chuyên gia dịch tễ học lâm sàng. Với mỗi bài báo dưới đây, xác định thiết kế nghiên cứu dựa trên tiêu đề và tóm tắt. ' +
+        'Chỉ dùng một mã trong danh sách: ' + codes + '. Nếu không đủ thông tin, dùng unk. ' +
+        'Trả về DUY NHẤT một mảng JSON, không kèm chữ nào khác, dạng [{"id":"...","t":"rct","why":"lý do tiếng Việt, tối đa 12 từ"}].\n\nBÀI BÁO:\n' +
+        JSON.stringify(batch.map(n => ({id:n.id, title:n.title, year:n.year, journal:n.journal, abstract:(n.abs || '').slice(0, 1400)})));
+      const r = await CAP.sample(prompt, {modelTier:'quick'});
+      const txt = String((r && r.text) || ''), m = txt.match(/\[[\s\S]*\]/);
+      let arr = []; try { arr = m ? JSON.parse(m[0]) : []; } catch (e) { arr = []; }
+      for (const it of Array.isArray(arr) ? arr : []) {
+        const n = S.nodes[S.idx.get(String(it && it.id))]; const t = String(it && it.t);
+        if (!n || n.study.t !== 'unk' || !TYPES[t] || t === 'unk') continue;
+        n.study = {t, src:'Claude (AI)', why:String(it.why || '').slice(0, 120)}; n.score = scoreOf(n); changed++;
+      }
+      done += batch.length;
+    }
+    am.textContent = 'Claude đã phân loại ' + changed + '/' + done + ' bài. Nhãn từ AI được ghi nguồn "Claude (AI)", có thể sửa trong Chi tiết.';
+  } catch (e) {
+    am.classList.add('err');
+    am.textContent = e && e.code === 'rate_limited' ? 'Claude đang bận (giới hạn lượt), thử lại sau ít phút.' : e && e.code === 'not_granted' ? 'Chưa được cấp quyền hỏi Claude.' : 'Không hỏi được Claude: ' + ((e && (e.message || e.code)) || 'lỗi');
+    if (e && e.code === 'not_granted') CAP.sample = null;
+  }
+  if (changed && !S.demo) LS.set('last', datasetOut());
+  applyVis(); renderLegend(); renderDetail(); renderList(); renderFilter(); btn.disabled = false;
+});
+
+/* ---------- inputs ---------- */
+$('#key').value = cfg.key; $('#email').value = cfg.email;
+$('#key').addEventListener('change', e => { cfg.key = e.target.value.trim(); LS.set('key', cfg.key); });
+$('#email').addEventListener('change', e => { cfg.email = e.target.value.trim(); LS.set('email', cfg.email); });
+$('#doiForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  cfg.key = $('#key').value.trim(); cfg.email = $('#email').value.trim(); LS.set('key', cfg.key); LS.set('email', cfg.email);
+  const dois = parseDois($('#doi').value);
+  if (!dois.length) { msg('Chưa thấy DOI hợp lệ (dạng 10.xxxx/...).', true); return; }
+  stopPlay(); msg(''); $('#go').disabled = true;
+  try {
+    const ds = await fetchNetwork(dois, +$('#maxCit').value);
+    status(null);
+    loadDataset(ds);
+    msg('Xong: ' + (ds.works.length - ds.seeds.length) + ' bài liên quan.' + (ds.pubmed === 'lỗi' ? ' PubMed không phản hồi, phân loại dựa trên từ khoá.' : '') + (ds.problems.length ? ' Bỏ qua: ' + ds.problems.join(' ') : ''), !!ds.problems.length);
+  } catch (err) {
+    status(null);
+    if (err.kind === 'net') msg('Không kết nối được OpenAlex. Nếu đang mở trang này bên trong Claude: trình duyệt chặn mọi kết nối ra ngoài, hãy dùng bản chạy độc lập (CiteNet.html) để dựng mạng, rồi Xuất JSON và Nhập vào đây. Nếu đang dùng bản độc lập: kiểm tra Internet.', true);
+    else if (err.kind === 'http' && err.status === 403) msg('OpenAlex từ chối (403). Khoá API có thể chưa kích hoạt (mở email kích hoạt) hoặc bị sai.', true);
+    else if (err.kind === 'rate') msg('OpenAlex báo vượt hạn mức hoặc gọi quá nhanh. Thử lại sau, hoặc thêm khoá API miễn phí.', true);
+    else if (err.kind === 'none') msg(err.message, true);
+    else msg('Lỗi khi lấy dữ liệu: ' + (err.status ? 'HTTP ' + err.status + ' ' : '') + (err.message || ''), true);
+  }
+  $('#go').disabled = false;
+});
+$('#importBtn').addEventListener('click', () => $('#file').click());
+$('#file').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  try { const ds = JSON.parse(await f.text()); stopPlay(); loadDataset(ds); msg('Đã mở ' + f.name + '.'); }
+  catch (err) { msg('Không đọc được file: ' + err.message, true); }
+  e.target.value = '';
+});
+stage.addEventListener('dragover', e => e.preventDefault());
+stage.addEventListener('drop', async e => {
+  e.preventDefault(); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return;
+  try { loadDataset(JSON.parse(await f.text())); msg('Đã mở ' + f.name + '.'); } catch (err) { msg('Không đọc được file: ' + err.message, true); }
+});
+
+/* ---------- simulated demo ---------- */
+function demoData() {
+  const R = rng(42), pick = a => a[Math.floor(R() * a.length)], works = [];
+  const designs = [['rct', 'In this randomized clinical trial, {n} participants were randomly assigned to intervention or usual care.'],
+    ['coh', 'This prospective cohort study followed {n} patients for five years.'], ['sr', 'This systematic review and meta-analysis pooled 18 trials including {n} participants.'],
+    ['cs', 'This cross-sectional study surveyed {n} adults.'], ['cc', 'In this case-control study of {n} cases and matched controls, exposure was compared.'],
+    ['rev', ''], ['gl', ''], ['unk', 'We discuss implications for practice.'], ['cr', 'We report a case of a patient with an unusual presentation.']];
+  const mk = (id, role, year) => { const [t, a] = pick(designs); const n = Math.round(20 + R() ** 2 * 4000);
+    return {id, doi:'', title:'Bài mô phỏng ' + id + (t === 'gl' ? ' · guideline' : t === 'rev' ? ' · review' : ''), year, authors:['Tác giả A', 'Tác giả B'], journal:'Tạp chí mô phỏng', srcType:R() < 0.9 ? 'journal' : 'repository',
+      otype:t === 'rev' ? 'review' : 'article', cited:Math.round(R() ** 3 * 600), refs:[], abs:'Dữ liệu mô phỏng để thử giao diện. ' + a.replace('{n}', n), pmid:'', oa:R() < 0.45 ? 'https://example.org/' + id : '', oaPdf:false, retracted:R() < 0.015, pubtypes:[]}; };
+  const seed = mk('S1', 'seed', 2020); seed.title = 'Bài gốc mô phỏng'; seed.abs = 'Dữ liệu mô phỏng. In this randomized clinical trial, 1250 participants were randomly assigned.'; seed.cited = 240;
+  works.push(seed);
+  for (let i = 1; i <= 34; i++) { const w = mk('R' + i, 'ref', 2000 + Math.floor(R() * 20)); works.push(w); seed.refs.push(w.id); }
+  for (let i = 1; i <= 96; i++) { const w = mk('C' + i, 'cit', 2020 + Math.floor(R() * 6)); w.refs.push('S1'); works.push(w); }
+  const refs = works.filter(w => w.id[0] === 'R'), cits = works.filter(w => w.id[0] === 'C');
+  for (const c of cits) { const k = Math.floor(R() * 4); for (let j = 0; j < k; j++) c.refs.push(pick(refs).id); if (R() < 0.25) { const o = pick(cits); if (o !== c && o.year <= c.year) c.refs.push(o.id); } }
+  for (const r of refs) if (R() < 0.3) { const o = pick(refs); if (o !== r && o.year <= r.year) r.refs.push(o.id); }
+  const both = refs.slice(0, 2); for (const b of both) b.refs.push('S1');
+  for (const w of works) w.refs = [...new Set(w.refs)];
+  return {app:'CiteNet', v:1, created:new Date().toISOString(), seeds:['S1'], citTotal:{S1:96}, pubmed:'ok', problems:[], works};
+}
+function showDemo() { stopPlay(); loadDataset(demoData(), {demo:true}); msg('Đang xem dữ liệu mô phỏng: tên bài, số liệu đều là giả, chỉ để thử giao diện.'); }
+$('#demoBtn').addEventListener('click', showDemo); $('#demoBtn2').addEventListener('click', showDemo);
+
+/* ---------- capabilities when hosted in Claude ---------- */
+async function initCaps() {
+  const c = window.claude;
+  if (!c || typeof c.use !== 'function') return false;
+  CAP.artifact = true;
+  try { CAP.dl = await c.use('downloads'); } catch (e) { CAP.dl = null; }
+  try { CAP.sample = await c.use('sample'); } catch (e) { CAP.sample = null; }
+  if (CAP.dl) $('#standaloneBtn').hidden = false;
+  renderFilter(); renderDetail();
+  return true;
+}
+initCaps().then(ok => { if (!ok) setTimeout(initCaps, 1500); });
+$('#standaloneBtn').addEventListener('click', async () => {
+  try {
+    const r = await fetch('./citenet.html'); if (!r.ok) throw new Error('HTTP ' + r.status);
+    const html = await r.text();
+    await CAP.dl.save({filename:'CiteNet.html', data:html});
+    msg('Đã lưu CiteNet.html. Mở file này bằng Chrome trên máy tính để tra DOI trực tiếp.');
+  } catch (e) { msg(e && e.code === 'declined' ? 'Đã huỷ lưu file.' : 'Không tải được bản độc lập (' + ((e && (e.code || e.message)) || 'lỗi') + ').', true); }
+});
+
+/* ---------- start ---------- */
+const last = LS.get('last', null);
+if (last) { try { loadDataset(last, {noSave:true}); msg('Đã mở lại mạng gần nhất.'); } catch (e) {} }
+}
+</script>
+<script>
+if ('serviceWorker' in navigator && location.protocol === 'https:') { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
+</script>
+</body>
+</html>
