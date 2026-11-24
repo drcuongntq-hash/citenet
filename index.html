@@ -189,6 +189,9 @@ pre,.scroll{overflow-x:auto}code{overflow-wrap:anywhere}
         <button class="btn grow0" type="button" id="reset">Sắp lại</button>
         <button class="btn grow0" type="button" id="dim">2D</button>
       </div>
+      <div class="row" id="expandRow" hidden>
+        <button class="btn" type="button" id="expandBtn">Mở rộng mạng: bài tương tự + liên kết bậc 2</button>
+      </div>
       <div class="legend" id="legend"></div>
       <p class="note">Kích thước nút = độ kết nối trong mạng, không phải chất lượng. Toạ độ không phải trục số. Chạm vào chú giải để ẩn/hiện nhóm.</p>
 
@@ -250,7 +253,7 @@ const TYPES = {
   unk:{l:'Chưa rõ',w:15,c:'#4a6a8c'}
 };
 const ROLES = {seed:{l:'Bài gốc',c:'#ff5c8a'}, ref:{l:'Bài gốc trích dẫn',c:'#8fd3ff'}, cit:{l:'Trích dẫn bài gốc',c:'#7ee0b0'},
-  both:{l:'Cả hai chiều',c:'#c3a6ff'}, multi:{l:'Chung nhiều bài gốc',c:'#ffffff'}, ind:{l:'Liên kết gián tiếp',c:'#7c8ea3'}};
+  both:{l:'Cả hai chiều',c:'#c3a6ff'}, multi:{l:'Chung nhiều bài gốc',c:'#ffffff'}, rel:{l:'Bài tương tự (OpenAlex gợi ý)',c:'#ffd27a'}, ind:{l:'Liên kết gián tiếp (bậc 2)',c:'#7c8ea3'}};
 const TIERS = [{k:'A',min:70,l:'A · cao (≥70)',c:'#6ee7b7'},{k:'B',min:50,l:'B · khá (50–69)',c:'#f7e463'},{k:'C',min:30,l:'C · trung bình (30–49)',c:'#ffa24c'},{k:'D',min:0,l:'D · thấp (<30)',c:'#e8452c'}];
 const tierOf = v => TIERS.find(t => v >= t.min);
 
@@ -318,8 +321,9 @@ function scoreOf(n) {
   const T = TYPES[n.study.t], parts = [];
   parts.push({k:'Thiết kế nghiên cứu', v:T.w, max:50, note:T.l + ' · nguồn: ' + n.study.src + (n.study.why ? ' (' + n.study.why + ')' : '')});
   let v = 5, note = 'Không rõ nơi công bố';
-  if (n.otype === 'preprint' || n.srcType === 'repository') { v = 3; note = 'Bản thảo / kho lưu trữ, chưa bình duyệt'; }
+  if (n.otype === 'preprint' || (n.srcType === 'repository' && !n.pmid)) { v = 3; note = 'Bản thảo / kho lưu trữ, chưa bình duyệt'; }
   else if (n.srcType === 'journal') { v = 10; note = 'Tạp chí: ' + (n.journal || 'có'); }
+  else if (n.pmid) { v = 8; note = 'Được đánh chỉ mục PubMed' + (n.journal && !/^pubmed/i.test(n.journal) ? ': ' + n.journal : ''); }
   else if (n.srcType) { v = 6; note = 'Nguồn: ' + n.srcType; }
   parts.push({k:'Nơi công bố', v, max:10, note});
   const N = sampleSize(n.abs), t = n.study.t;
@@ -344,7 +348,7 @@ let CAP = {dl:null, sample:null, artifact:false};
 
 /* ---------- OpenAlex / PubMed ---------- */
 const OA = 'https://api.openalex.org';
-const SEL = 'id,doi,display_name,publication_year,authorships,primary_location,referenced_works,cited_by_count,abstract_inverted_index,ids,open_access,best_oa_location,type,is_retracted';
+const SEL = 'id,doi,display_name,publication_year,authorships,primary_location,referenced_works,related_works,cited_by_count,abstract_inverted_index,ids,open_access,best_oa_location,type,is_retracted';
 const short = s => String(s || '').replace(/^https?:\/\/openalex\.org\//i, '');
 class ApiErr extends Error { constructor(kind, status, msg) { super(msg); this.kind = kind; this.status = status; } }
 function oaUrl(path, params = {}) {
@@ -377,7 +381,7 @@ function toNode(w) {
     year:w.publication_year || null, authors:(w.authorships || []).map(a => a && a.author && a.author.display_name).filter(Boolean).slice(0, 40),
     journal:(w.primary_location && w.primary_location.source && w.primary_location.source.display_name) || '',
     srcType:(w.primary_location && w.primary_location.source && w.primary_location.source.type) || '',
-    otype:w.type || '', cited:w.cited_by_count || 0, refs:(w.referenced_works || []).map(short),
+    otype:w.type || '', cited:w.cited_by_count || 0, refs:(w.referenced_works || []).map(short), related:(w.related_works || []).map(short),
     abs:invAbs(w.abstract_inverted_index), pmid:String((w.ids && w.ids.pmid) || '').replace(/\D/g, ''),
     oa:safeUrl(b.pdf_url) || safeUrl(b.landing_page_url) || safeUrl(w.open_access && w.open_access.oa_url) || '',
     oaPdf:!!safeUrl(b.pdf_url), retracted:!!w.is_retracted, pubtypes:[]
@@ -393,8 +397,15 @@ function parseDois(text) {
   for (const m of t.matchAll(/(?:^|[\s,;])(\d{6,9})(?=$|[\s,;])/g)) add('pmid:' + m[1]);
   return out;
 }
-async function fetchNetwork(dois, maxCit) {
+async function fetchNetwork(dois, maxCit, opts = {}) {
   const works = new Map(), seeds = [], citTotal = {}, problems = [];
+  const batch = async (ids, label) => {
+    for (let i = 0; i < ids.length; i += 50) {
+      status(label + ' ' + Math.min(i + 50, ids.length) + '/' + ids.length + '…');
+      const r = await getJSON(oaUrl('/works', {filter:'openalex:' + ids.slice(i, i + 50).join('|'), per_page:100, select:SEL}));
+      for (const w of r.results || []) { const n = toNode(w); if (!works.has(n.id)) works.set(n.id, n); }
+    }
+  };
   for (const key of dois) {
     const doi = key.replace(/^(doi|pmid):/, (a, k) => k === 'pmid' ? 'PMID ' : '');
     status('Đang lấy bài gốc ' + doi + '…');
@@ -408,11 +419,7 @@ async function fetchNetwork(dois, maxCit) {
   }
   if (!seeds.length) throw new ApiErr('none', 404, problems.join(' '));
   const refIds = [...new Set(seeds.flatMap(id => works.get(id).refs))].filter(id => !works.has(id));
-  for (let i = 0; i < refIds.length; i += 50) {
-    status('Tài liệu tham khảo ' + Math.min(i + 50, refIds.length) + '/' + refIds.length + '…');
-    const r = await getJSON(oaUrl('/works', {filter:'openalex:' + refIds.slice(i, i + 50).join('|'), per_page:100, select:SEL}));
-    for (const w of r.results || []) { const n = toNode(w); if (!works.has(n.id)) works.set(n.id, n); }
-  }
+  await batch(refIds, 'Tài liệu tham khảo');
   for (const sid of seeds) {
     let page = 1, got = 0;
     while (got < maxCit) {
@@ -426,6 +433,23 @@ async function fetchNetwork(dois, maxCit) {
       page++;
     }
   }
+  const direct = works.size - seeds.length;
+  const expanded = !!opts.expand || (opts.auto !== false && direct < 30);
+  if (expanded) {
+    const relIds = [...new Set(seeds.flatMap(id => works.get(id).related))].filter(id => !works.has(id));
+    await batch(relIds, 'Bài tương tự');
+    const first = [...works.values()].filter(n => !seeds.includes(n.id));
+    const freq = new Map();
+    for (const n of first) for (const r of n.refs) if (!works.has(r)) freq.set(r, (freq.get(r) || 0) + 1);
+    await batch([...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 150).map(e => e[0]), 'Liên kết bậc 2');
+    const top = first.sort((a, b) => b.cited - a.cited).slice(0, 15);
+    for (let i = 0; i < top.length; i++) {
+      if (!top[i].cited) continue;
+      status('Liên kết bậc 2: bài trích dẫn ' + (i + 1) + '/' + top.length + '…');
+      const r = await getJSON(oaUrl('/works', {filter:'cites:' + top[i].id, per_page:20, sort:'cited_by_count:desc', select:SEL}));
+      for (const w of r.results || []) { const n = toNode(w); if (!works.has(n.id)) works.set(n.id, n); }
+    }
+  }
   let pubmed = 'ok';
   const pm = [...works.values()].filter(n => n.pmid);
   try {
@@ -436,13 +460,13 @@ async function fetchNetwork(dois, maxCit) {
       if (cfg.email.trim()) url += '&email=' + encodeURIComponent(cfg.email.trim());
       const r = await getJSON(url, 3);
       const res = (r && r.result) || {};
-      for (const n of chunk) { const it = res[n.pmid]; if (it && Array.isArray(it.pubtype)) n.pubtypes = it.pubtype.map(String); }
+      for (const n of chunk) { const it = res[n.pmid]; if (!it) continue; if (Array.isArray(it.pubtype)) n.pubtypes = it.pubtype.map(String); const jn = String(it.fulljournalname || it.source || ''); if (jn && (!n.journal || /^pubmed/i.test(n.journal) || n.srcType !== 'journal')) n.journal = jn; }
       await sleep(380);
     }
   } catch (e) { pubmed = 'lỗi'; }
   const ids = new Set(works.keys());
-  const list = [...works.values()].map(n => ({...n, refs:n.refs.filter(r => ids.has(r) && r !== n.id)}));
-  return {app:'CiteNet', v:1, created:new Date().toISOString(), seeds, citTotal, pubmed, problems, works:list};
+  const list = [...works.values()].map(n => ({...n, refs:n.refs.filter(r => ids.has(r) && r !== n.id), related:seeds.includes(n.id) ? n.related.filter(r => ids.has(r)) : []}));
+  return {app:'CiteNet', v:1, created:new Date().toISOString(), seeds, citTotal, pubmed, problems, expanded, direct, auto:expanded && !opts.expand, works:list};
 }
 
 /* ---------- dataset -> graph ---------- */
@@ -452,7 +476,7 @@ function loadDataset(ds, opts = {}) {
   const nodes = ds.works.map(w => ({
     id:String(w.id), doi:String(w.doi || ''), title:String(w.title || ''), year:Number(w.year) || null,
     authors:Array.isArray(w.authors) ? w.authors.map(String) : [], journal:String(w.journal || ''), srcType:String(w.srcType || ''),
-    otype:String(w.otype || ''), cited:Number(w.cited) || 0, refs:Array.isArray(w.refs) ? w.refs.map(String) : [],
+    otype:String(w.otype || ''), cited:Number(w.cited) || 0, refs:Array.isArray(w.refs) ? w.refs.map(String) : [], related:Array.isArray(w.related) ? w.related.map(String) : [],
     abs:String(w.abs || ''), pmid:String(w.pmid || '').replace(/\D/g, ''), oa:safeUrl(w.oa), oaPdf:!!w.oaPdf, retracted:!!w.retracted,
     pubtypes:Array.isArray(w.pubtypes) ? w.pubtypes.map(String) : [], studyOv:w.studyOv && TYPES[w.studyOv.t] ? w.studyOv : null
   }));
@@ -460,6 +484,9 @@ function loadDataset(ds, opts = {}) {
   const seeds = ds.seeds.map(String).filter(id => idx.has(id));
   if (!seeds.length) throw new Error('Không tìm thấy bài gốc trong file.');
   const seedRefs = new Map(seeds.map(id => [id, new Set(nodes[idx.get(id)].refs)]));
+  const seedRel = new Set(seeds.flatMap(id => nodes[idx.get(id)].related));
+  const relEdges = [];
+  for (const id of seeds) for (const r of nodes[idx.get(id)].related) { const j = idx.get(r); if (j != null) relEdges.push({s:idx.get(id), t:j}); }
   const edges = [];
   for (const n of nodes) { n.inN = 0; n.outN = 0; n.refSet = new Set(n.refs); }
   nodes.forEach((n, i) => { for (const r of n.refs) { const j = idx.get(r); if (j != null && j !== i) edges.push({s:i, t:j}); } });
@@ -470,14 +497,14 @@ function loadDataset(ds, opts = {}) {
     const refOf = seeds.filter(s => s !== n.id && seedRefs.get(s).has(n.id));
     const cites = seeds.filter(s => s !== n.id && n.refSet.has(s));
     n.seedLinks = [...new Set([...refOf, ...cites])];
-    n.role = n.isSeed ? 'seed' : n.seedLinks.length >= 2 ? 'multi' : refOf.length && cites.length ? 'both' : refOf.length ? 'ref' : cites.length ? 'cit' : 'ind';
+    n.role = n.isSeed ? 'seed' : n.seedLinks.length >= 2 ? 'multi' : refOf.length && cites.length ? 'both' : refOf.length ? 'ref' : cites.length ? 'cit' : seedRel.has(n.id) ? 'rel' : 'ind';
     n.deg = n.inN + n.outN; if (!n.isSeed) maxDeg = Math.max(maxDeg, n.deg);
     const ov = overrides[n.id] || n.studyOv;
     n.study = ov && TYPES[ov.t] ? {t:ov.t, src:ov.src || 'Người dùng', why:ov.why || ''} : classify(n);
     n.score = scoreOf(n);
     n.app = 0;
   }
-  Object.assign(S, {nodes, edges, idx, seeds, maxDeg, sel:null, yearCut:null, demo:!!opts.demo,
+  Object.assign(S, {nodes, edges, relEdges, idx, seeds, maxDeg, sel:null, yearCut:null, demo:!!opts.demo,
     meta:{citTotal:ds.citTotal || {}, pubmed:ds.pubmed || '', created:ds.created || '', problems:ds.problems || []}});
   const ys = nodes.map(n => n.year).filter(Boolean);
   S.minY = ys.length ? Math.min(...ys) : CURY; S.maxY = ys.length ? Math.max(...ys) : CURY;
@@ -491,13 +518,13 @@ function loadDataset(ds, opts = {}) {
 }
 function datasetOut() {
   return {...S.raw, works:S.nodes.map(n => ({id:n.id, doi:n.doi, title:n.title, year:n.year, authors:n.authors, journal:n.journal, srcType:n.srcType,
-    otype:n.otype, cited:n.cited, refs:n.refs, abs:n.abs, pmid:n.pmid, oa:n.oa, oaPdf:n.oaPdf, retracted:n.retracted, pubtypes:n.pubtypes,
+    otype:n.otype, cited:n.cited, refs:n.refs, related:n.related, abs:n.abs, pmid:n.pmid, oa:n.oa, oaPdf:n.oaPdf, retracted:n.retracted, pubtypes:n.pubtypes,
     studyOv:['Người dùng', 'Claude (AI)'].includes(n.study.src) ? n.study : undefined}))};
 }
 
 /* ---------- layout (3D force) ---------- */
 function rng(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-const ROLE_R = {ref:115, cit:200, both:150, multi:70, ind:240};
+const ROLE_R = {ref:115, cit:200, both:150, multi:70, rel:165, ind:240};
 function initLayout() {
   const R = rng(7), k = S.seeds.length, seedPos = new Map();
   S.seeds.forEach((id, i) => { const a = i / k * Math.PI * 2, rad = k === 1 ? 0 : 140 + 40 * k; seedPos.set(id, [Math.cos(a) * rad, (i % 2 ? 40 : -40) * (k > 1), Math.sin(a) * rad]); });
@@ -531,6 +558,11 @@ function tick(a) {
     const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.01, f = (d - L) / d * K;
     const wa = A.isSeed ? 0 : B.isSeed ? 1 : 0.5, wb = B.isSeed ? 0 : A.isSeed ? 1 : 0.5;
     A.vx += dx * f * wa; A.vy += dy * f * wa; A.vz += dz * f * wa; B.vx -= dx * f * wb; B.vy -= dy * f * wb; B.vz -= dz * f * wb;
+  }
+  for (const e of S.relEdges || []) {
+    const A = N[e.s], B = N[e.t]; if (B.role !== 'rel') continue;
+    const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, d = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.01, f = (d - ROLE_R.rel) / d * K;
+    B.vx -= dx * f; B.vy -= dy * f; B.vz -= dz * f;
   }
   for (const A of N) {
     if (A.isSeed) { const p = S.seedPos.get(A.id); A.x = p[0]; A.y = p[1]; A.z = p[2]; A.vx = A.vy = A.vz = 0; continue; }
@@ -588,7 +620,7 @@ function draw() {
   project();
   const N = S.nodes, sel = S.sel && S.sel.app > 0.05 ? S.sel : null, q = S.q;
   const nb = sel ? new Set() : null;
-  if (sel) { const si = S.idx.get(sel.id); for (const e of S.edges) { if (e.s === si) nb.add(e.t); if (e.t === si) nb.add(e.s); } nb.add(si); }
+  if (sel) { const si = S.idx.get(sel.id); for (const e of S.edges) { if (e.s === si) nb.add(e.t); if (e.t === si) nb.add(e.s); } for (const e of S.relEdges || []) { if (e.s === si) nb.add(e.t); if (e.t === si) nb.add(e.s); } nb.add(si); }
   const lit = (i) => { const n = N[i]; if (n.app < 0.05) return false; if (nb && !nb.has(i)) return false; if (q && !n._m) return false; return true; };
   // edges
   ctx.lineWidth = 0.7; ctx.strokeStyle = sel || q ? 'rgba(170,215,255,0.06)' : 'rgba(170,225,215,0.22)'; ctx.beginPath();
@@ -609,6 +641,11 @@ function draw() {
       for (const e of S.edges) { if (!cond(e)) continue; const A = N[e.s], B = N[e.t]; if (A.app < 0.05 || B.app < 0.05) continue; ctx.moveTo(A.px, A.py); ctx.lineTo(B.px, B.py); hs.push(e); }
       ctx.stroke(); ctx.beginPath(); for (const e of hs) arrowHead(N[e.s], N[e.t], 7); ctx.fill();
     }
+  }
+  if (S.relEdges && S.relEdges.length) {
+    ctx.save(); ctx.setLineDash([4, 5]); ctx.lineWidth = 1; ctx.strokeStyle = q ? 'rgba(255,210,122,0.12)' : 'rgba(255,210,122,0.5)'; ctx.beginPath();
+    for (const e of S.relEdges) { const A = N[e.s], B = N[e.t]; if (A.app < 0.05 || B.app < 0.05) continue; if (sel && A !== sel && B !== sel) continue; ctx.moveTo(A.px, A.py); ctx.lineTo(B.px, B.py); }
+    ctx.stroke(); ctx.restore();
   }
   // nodes, far to near
   order = N.map((n, i) => i).filter(i => N[i].app > 0.02).sort((a, b) => N[b].pz - N[a].pz);
@@ -727,6 +764,7 @@ function applyVis() {
 function refreshAll() {
   for (const n of S.nodes) n._hay = norm(n.title + ' ' + n.authors.join(' ') + ' ' + n.doi + ' ' + n.journal + ' ' + n.year);
   applyVis(); renderStats(); renderLegend(); renderDetail(); renderList(); renderFilter(); updateYearLbl();
+  $('#expandRow').hidden = CAP.artifact || S.demo || !!(S.raw && S.raw.expanded);
 }
 function renderStats() {
   const N = S.nodes, others = N.length - S.seeds.length;
@@ -789,7 +827,7 @@ function renderDetail() {
 }
 function seedInfo(n) {
   const refsIn = n.refs.length, cits = S.nodes.filter(m => m.refSet.has(n.id)).length, tot = S.meta.citTotal[n.id];
-  return '<p class="meta" style="margin-top:12px">Tài liệu tham khảo trong mạng: ' + refsIn + ' · Bài trích dẫn đã lấy: ' + cits + (tot ? ' / ' + tot + ' trên OpenAlex' : '') + '</p>';
+  return (refsIn ? '' : '<p class="note" style="margin-top:12px">OpenAlex không có danh sách tài liệu tham khảo của bài này (nhà xuất bản không nộp lên Crossref). Các nút vàng là bài tương tự do OpenAlex gợi ý.</p>') + '<p class="meta" style="margin-top:12px">Tài liệu tham khảo trong mạng: ' + refsIn + ' · Bài trích dẫn đã lấy: ' + cits + (tot ? ' / ' + tot + ' trên OpenAlex' : '') + '</p>';
 }
 $('#tab-detail').addEventListener('change', e => {
   if (e.target.id !== 'typeSel' || !S.sel) return;
@@ -957,14 +995,17 @@ $('#doiForm').addEventListener('submit', async e => {
   const dois = parseDois($('#doi').value);
   if (!dois.length) { msg('Chưa thấy DOI (dạng 10.xxxx/...) hoặc PMID hợp lệ.', true); return; }
   LS.set('maxCit', $('#maxCit').value);
-  stopPlay(); msg(''); $('#go').disabled = true;
+  await build(dois, {});
+});
+async function build(dois, opts) {
+  stopPlay(); msg(''); $('#go').disabled = true; $('#expandBtn').disabled = true;
   try {
-    const ds = await fetchNetwork(dois, +$('#maxCit').value);
+    const ds = await fetchNetwork(dois, +$('#maxCit').value, opts);
     status(null);
     loadDataset(ds);
     remember(ds);
     if (matchMedia('(max-width: 900px)').matches) window.scrollTo({top:0, behavior:reduced ? 'auto' : 'smooth'});
-    msg('Xong: ' + (ds.works.length - ds.seeds.length) + ' bài liên quan.' + (ds.pubmed === 'lỗi' ? ' PubMed không phản hồi, phân loại dựa trên từ khoá.' : '') + (ds.problems.length ? ' Bỏ qua: ' + ds.problems.join(' ') : ''), !!ds.problems.length);
+    msg('Xong: ' + (ds.works.length - ds.seeds.length) + ' bài liên quan.' + (ds.auto ? ' OpenAlex chỉ có ' + ds.direct + ' liên kết trực tiếp cho bài này (thường gặp ở tạp chí Trung Quốc, Việt Nam không nộp danh mục tài liệu tham khảo), nên CiteNet đã tự mở rộng bằng bài tương tự và liên kết bậc 2.' : '') + (ds.pubmed === 'lỗi' ? ' PubMed không phản hồi, phân loại dựa trên từ khoá.' : '') + (ds.problems.length ? ' Bỏ qua: ' + ds.problems.join(' ') : ''), !!ds.problems.length);
   } catch (err) {
     status(null);
     if (err.kind === 'net') msg('Không kết nối được OpenAlex. Nếu đang mở trang này bên trong Claude: trình duyệt chặn mọi kết nối ra ngoài, hãy dùng bản chạy độc lập (CiteNet.html) để dựng mạng, rồi Xuất JSON và Nhập vào đây. Nếu đang dùng bản độc lập: kiểm tra Internet.', true);
@@ -973,8 +1014,9 @@ $('#doiForm').addEventListener('submit', async e => {
     else if (err.kind === 'none') msg(err.message, true);
     else msg('Lỗi khi lấy dữ liệu: ' + (err.status ? 'HTTP ' + err.status + ' ' : '') + (err.message || ''), true);
   }
-  $('#go').disabled = false;
-});
+  $('#go').disabled = false; $('#expandBtn').disabled = false;
+}
+$('#expandBtn').addEventListener('click', () => { if (S.seeds.length) build(S.seeds.slice(), {expand:true}); });
 const EXAMPLES = [['Thang điểm ICH (Hemphill 2001)', '10.1161/01.STR.32.4.891'], ['Surviving Sepsis 2021', '10.1097/CCM.0000000000005337'], ['Lối sống sau ĐTĐ thai kỳ (JAMA Netw Open 2022)', '10.1001/jamanetworkopen.2022.0773']];
 function remember(ds) {
   let h = LS.get('hist', []);
@@ -1035,6 +1077,7 @@ async function initCaps() {
   try { CAP.dl = await c.use('downloads'); } catch (e) { CAP.dl = null; }
   try { CAP.sample = await c.use('sample'); } catch (e) { CAP.sample = null; }
   if (CAP.dl) $('#standaloneBtn').hidden = false;
+  $('#expandRow').hidden = true;
   renderFilter(); renderDetail();
   return true;
 }
