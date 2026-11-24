@@ -68,6 +68,10 @@ textarea{resize:vertical;font-size:16px}
 .grow0{flex:0 0 auto}
 details summary{cursor:pointer;color:var(--sky);font-size:14px;min-height:32px;padding-top:8px}
 .note{font-size:13px;color:var(--mut);margin:6px 0 0}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.quick:empty{display:none}
+.quick span{font-size:13px;color:var(--mut);align-self:center}
+.qbtn{font-size:13px;min-height:36px;border-radius:999px;border:1px solid var(--line);background:var(--bg2);padding:4px 12px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qbtn:hover{border-color:var(--sky)}
 .msg{font-size:14px;margin:10px 0 0;color:var(--yel)}
 .msg:empty{display:none}
 .msg.err{color:#ff9db6}
@@ -131,8 +135,8 @@ pre,.scroll{overflow-x:auto}code{overflow-wrap:anywhere}
     <div class="flag" id="demoFlag" hidden>Dữ liệu mô phỏng, không phải bài báo thật</div>
     <div class="empty" id="empty">
       <h2>Một DOI, cả mạng trích dẫn quanh nó.</h2>
-      <p>Nhập DOI ở khung bên cạnh. CiteNet lấy tài liệu tham khảo, các bài trích dẫn, tóm tắt, bản truy cập mở, rồi phân loại thiết kế nghiên cứu và chấm điểm sàng lọc độ tin cậy.</p>
-      <p><button class="btn" id="demoBtn2" type="button">Xem bản mô phỏng</button></p>
+      <p>Nhập DOI hoặc PMID vào khung "Bài gốc" (trên điện thoại: kéo xuống dưới). CiteNet lấy tài liệu tham khảo, các bài trích dẫn, tóm tắt, bản truy cập mở, rồi phân loại thiết kế nghiên cứu và chấm điểm sàng lọc độ tin cậy.</p>
+      <p style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn primary" id="exBtn" type="button">Dựng thử: thang điểm ICH</button><button class="btn" id="demoBtn2" type="button">Xem bản mô phỏng</button></p>
     </div>
     <div class="status" id="status" hidden><div class="spin"></div><span id="statusTxt"></span></div>
     <div class="tip" id="tip" hidden></div>
@@ -149,17 +153,18 @@ pre,.scroll{overflow-x:auto}code{overflow-wrap:anywhere}
     <div class="chips" id="stats"><span class="chip">Chưa có dữ liệu</span></div>
 
     <form id="doiForm" class="sec" autocomplete="off">
-      <label for="doi">Bài gốc: DOI, mỗi dòng một bài (có thể nhiều bài)</label>
-      <textarea id="doi" rows="2" placeholder="10.1001/jamanetworkopen.2022.0773"></textarea>
+      <label for="doi">Bài gốc: DOI, PMID hoặc link PubMed (nhiều bài: cách nhau bằng dấu phẩy)</label>
+      <textarea id="doi" rows="2" enterkeyhint="go" autocapitalize="off" spellcheck="false" placeholder="10.1001/jamanetworkopen.2022.0773"></textarea>
+      <div class="quick" id="quick"></div>
       <div class="row">
         <div><label for="maxCit">Tối đa bài trích dẫn mỗi bài gốc</label>
-          <select id="maxCit"><option>100</option><option selected>200</option><option>400</option><option>800</option></select></div>
+          <select id="maxCit"><option>100</option><option>200</option><option selected>400</option><option>800</option></select></div>
         <button class="btn primary grow0" type="submit" id="go">Dựng mạng</button>
       </div>
-      <details id="settings"><summary>Khoá API OpenAlex và email</summary>
+      <details id="settings"><summary>Khoá API OpenAlex và email (không bắt buộc)</summary>
         <div class="row"><div><label for="key">Khoá API (miễn phí tại openalex.org/settings/api)</label><input type="password" id="key" placeholder="Dán khoá vào đây"></div></div>
         <div class="row"><div><label for="email">Email (gửi kèm cho OpenAlex và PubMed)</label><input type="text" id="email" inputmode="email" placeholder="ten@benhvien.vn"></div></div>
-        <p class="note">Khoá chỉ lưu trong trình duyệt này. Không có khoá vẫn chạy được với hạn mức nhỏ; có khoá miễn phí được hạn mức gấp 10 lần.</p>
+        <p class="note">Không cần khoá: mỗi ngày vẫn dựng được khoảng 100 mạng. Chỉ khi dùng rất nhiều mới cần khoá miễn phí (hạn mức gấp 10 lần). Khoá chỉ lưu trong trình duyệt này.</p>
       </details>
       <div class="row">
         <button class="btn" type="button" id="importBtn">Nhập JSON</button>
@@ -379,19 +384,25 @@ function toNode(w) {
   };
 }
 function parseDois(text) {
-  const out = [];
-  for (let m of String(text).match(/10\.\d{4,9}\/[^\s,;"'<>]+/g) || []) { m = m.replace(/[.)\]]+$/, ''); if (!out.includes(m.toLowerCase())) out.push(m.toLowerCase()); }
+  const out = [], add = v => { if (!out.includes(v)) out.push(v); };
+  let t = String(text);
+  for (let m of t.match(/10\.\d{4,9}\/[^\s,;"'<>]+/g) || []) { m = m.replace(/[.)\]]+$/, ''); add('doi:' + m.toLowerCase()); }
+  t = t.replace(/10\.\d{4,9}\/[^\s,;"'<>]+/g, ' ');
+  for (const m of t.matchAll(/(?:pubmed\.ncbi\.nlm\.nih\.gov\/|pmid\s*:?\s*)(\d{5,9})/gi)) add('pmid:' + m[1]);
+  t = t.replace(/(?:pubmed\.ncbi\.nlm\.nih\.gov\/|pmid\s*:?\s*)\d{5,9}/gi, ' ');
+  for (const m of t.matchAll(/(?:^|[\s,;])(\d{6,9})(?=$|[\s,;])/g)) add('pmid:' + m[1]);
   return out;
 }
 async function fetchNetwork(dois, maxCit) {
   const works = new Map(), seeds = [], citTotal = {}, problems = [];
-  for (const doi of dois) {
+  for (const key of dois) {
+    const doi = key.replace(/^(doi|pmid):/, (a, k) => k === 'pmid' ? 'PMID ' : '');
     status('Đang lấy bài gốc ' + doi + '…');
     try {
-      const w = await getJSON(oaUrl('/works/doi:' + doi, {select:SEL}));
+      const w = await getJSON(oaUrl('/works/' + key, {select:SEL}));
       const n = toNode(w); works.set(n.id, n); seeds.push(n.id);
     } catch (e) {
-      if (e.kind === 'http' && e.status === 404) problems.push('Không tìm thấy DOI ' + doi + ' trên OpenAlex.');
+      if (e.kind === 'http' && e.status === 404) problems.push('Không tìm thấy ' + (key.startsWith('pmid') ? '' : 'DOI ') + doi + ' trên OpenAlex.');
       else throw e;
     }
   }
@@ -944,12 +955,15 @@ $('#doiForm').addEventListener('submit', async e => {
   e.preventDefault();
   cfg.key = $('#key').value.trim(); cfg.email = $('#email').value.trim(); LS.set('key', cfg.key); LS.set('email', cfg.email);
   const dois = parseDois($('#doi').value);
-  if (!dois.length) { msg('Chưa thấy DOI hợp lệ (dạng 10.xxxx/...).', true); return; }
+  if (!dois.length) { msg('Chưa thấy DOI (dạng 10.xxxx/...) hoặc PMID hợp lệ.', true); return; }
+  LS.set('maxCit', $('#maxCit').value);
   stopPlay(); msg(''); $('#go').disabled = true;
   try {
     const ds = await fetchNetwork(dois, +$('#maxCit').value);
     status(null);
     loadDataset(ds);
+    remember(ds);
+    if (matchMedia('(max-width: 900px)').matches) window.scrollTo({top:0, behavior:reduced ? 'auto' : 'smooth'});
     msg('Xong: ' + (ds.works.length - ds.seeds.length) + ' bài liên quan.' + (ds.pubmed === 'lỗi' ? ' PubMed không phản hồi, phân loại dựa trên từ khoá.' : '') + (ds.problems.length ? ' Bỏ qua: ' + ds.problems.join(' ') : ''), !!ds.problems.length);
   } catch (err) {
     status(null);
@@ -961,6 +975,21 @@ $('#doiForm').addEventListener('submit', async e => {
   }
   $('#go').disabled = false;
 });
+const EXAMPLES = [['Thang điểm ICH (Hemphill 2001)', '10.1161/01.STR.32.4.891'], ['Surviving Sepsis 2021', '10.1097/CCM.0000000000005337'], ['Lối sống sau ĐTĐ thai kỳ (JAMA Netw Open 2022)', '10.1001/jamanetworkopen.2022.0773']];
+function remember(ds) {
+  let h = LS.get('hist', []);
+  for (const id of ds.seeds) { const w = ds.works.find(x => x.id === id); if (!w || !w.doi) continue; h = h.filter(x => x.doi !== w.doi); h.unshift({doi:w.doi, t:String(w.title).slice(0, 80), y:w.year || ''}); }
+  LS.set('hist', h.slice(0, 8)); renderQuick();
+}
+function renderQuick() {
+  const h = LS.get('hist', []), list = h.length ? h.map(x => [x.t + (x.y ? ' (' + x.y + ')' : ''), x.doi]) : EXAMPLES;
+  $('#quick').innerHTML = '<span>' + (h.length ? 'Gần đây:' : 'Thử nhanh:') + '</span>' + list.map(([l, d]) => '<button type="button" class="qbtn" data-doi="' + esc(d) + '" title="' + esc(d) + '">' + esc(l) + '</button>').join('');
+}
+$('#quick').addEventListener('click', e => { const b = e.target.closest('[data-doi]'); if (!b || $('#go').disabled) return; $('#doi').value = b.dataset.doi; $('#doiForm').requestSubmit(); });
+$('#doi').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#doiForm').requestSubmit(); } });
+$('#maxCit').value = LS.get('maxCit', '400');
+renderQuick();
+$('#exBtn').addEventListener('click', () => { $('#doi').value = EXAMPLES[0][1]; $('#doiForm').requestSubmit(); });
 $('#importBtn').addEventListener('click', () => $('#file').click());
 $('#file').addEventListener('change', async e => {
   const f = e.target.files && e.target.files[0]; if (!f) return;
